@@ -2518,11 +2518,15 @@ input::-ms-clear {
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: var(--shadow-xl);
+    will-change: transform, opacity;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translateZ(0);
     animation: modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .modal-overlay.closing .modal-content {
-    animation: modalOut 0.2s ease both;
+    animation: modalOut 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .modal-header {
@@ -5361,23 +5365,28 @@ select.premium-select-source {
 
     .modal-overlay {
         align-items: flex-end;
-        padding: 0;
+        padding: 10px;
     }
 
     .modal-content {
-        position: fixed;
+        position: relative;
         left: 0;
         right: 0;
         bottom: 0;
         width: 100%;
         max-width: 100%;
-        max-height: 88vh;
-        border-radius: 18px 18px 0 0;
-        animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        max-height: 85vh;
+        border-radius: 20px;
+        transform-origin: bottom center;
+        will-change: transform, opacity;
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+        transform: translateZ(0);
+        animation: modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
     }
 
     .modal-overlay.closing .modal-content {
-        animation: modalSlideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+        animation: modalOut 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
     }
 
     .modal-header {
@@ -5450,6 +5459,22 @@ select.premium-select-source {
 :root[data-theme='dark'] .mobile-header {
     background: rgba(11, 19, 36, 0.92);
     border-bottom-color: rgba(86, 102, 138, 0.45);
+}
+
+:root[data-theme='dark'] .mobile-profile-name {
+    color: var(--text-white);
+}
+
+:root[data-theme='dark'] .mobile-profile-role {
+    color: var(--text-muted);
+}
+
+:root[data-theme='dark'] .mobile-profile-item i {
+    color: var(--primary-light);
+}
+
+:root[data-theme='dark'] .mobile-profile-item span {
+    color: var(--text-secondary);
 }
 
 :root[data-theme='dark'] .mobile-tabbar {
@@ -5570,16 +5595,25 @@ select.premium-select-source {
     background: #1c2d4c;
 }
 
-:root[data-theme='dark'] .cal-day-item.blue {
+:root[data-theme='dark'] .cal-day-item.blue,
+:root[data-theme='dark'] .cal-phone-event.blue {
     background: #1a2845;
+    color: #9bb8ff;
+    border-left-color: #3b82f6;
 }
 
-:root[data-theme='dark'] .cal-day-item.green {
+:root[data-theme='dark'] .cal-day-item.green,
+:root[data-theme='dark'] .cal-phone-event.green {
     background: #173124;
+    color: #4ade80;
+    border-left-color: #22c55e;
 }
 
-:root[data-theme='dark'] .cal-day-item.orange {
+:root[data-theme='dark'] .cal-day-item.orange,
+:root[data-theme='dark'] .cal-phone-event.orange {
     background: #3a261b;
+    color: #fb923c;
+    border-left-color: #f97316;
 }
 
 :root[data-theme='dark'] .cal-phone-shell {

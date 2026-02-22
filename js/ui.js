@@ -16,9 +16,7 @@ App.ui = {
         const saved = App.store && typeof App.store.get === 'function'
             ? App.store.get('theme')
             : null;
-        const hasSaved = saved === 'dark' || saved === 'light';
-        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initialTheme = hasSaved ? saved : (prefersDark ? 'dark' : 'light');
+        const initialTheme = (saved === 'dark' || saved === 'light') ? saved : 'light';
         this.applyTheme(initialTheme, false);
 
         if (!window.matchMedia || this._themeSystemBound) return;
