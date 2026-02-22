@@ -199,12 +199,8 @@ App.ui = {
     initCustomSelects(root) {
         const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
         this._bindCustomSelectGlobals();
-        // Keep schedule time selectors native for reliability in settings/availability flows.
-        scope.querySelectorAll('select.schedule-time-select').forEach(select => {
-            this._destroyCustomSelect(select);
-            select.classList.remove('premium-select-source');
-        });
-        const selects = scope.querySelectorAll('select.select-input, select.form-input');
+        
+        const selects = scope.querySelectorAll('select.select-input, select.form-input, select.schedule-time-select');
         selects.forEach(select => this._mountCustomSelect(select));
     },
 
@@ -254,7 +250,14 @@ App.ui = {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') App.ui.closeCustomSelects();
         });
-        document.addEventListener('scroll', () => App.ui.closeCustomSelects(), true);
+        
+        document.addEventListener('scroll', (e) => {
+            if (e.target && e.target.nodeType === 1) {
+                if (e.target.closest('.premium-select-panel') || e.target.closest('.premium-select-sheet-list')) return;
+            }
+            App.ui.closeCustomSelects();
+        }, true);
+        
         this._customSelectBound = true;
     },
 

@@ -320,6 +320,30 @@ button {
     }
 }
 
+@keyframes modalSlideUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes modalSlideDown {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+}
+
 @keyframes toastIn {
     from {
         transform: translateX(120%);
@@ -5349,7 +5373,11 @@ select.premium-select-source {
         max-width: 100%;
         max-height: 88vh;
         border-radius: 18px 18px 0 0;
-        animation: modalIn 0.22s ease both;
+        animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    .modal-overlay.closing .modal-content {
+        animation: modalSlideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
     }
 
     .modal-header {
