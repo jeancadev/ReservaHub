@@ -1,0 +1,468 @@
+/* ============================================
+   ReservaHub - Core Application Engine
+   ============================================ */
+
+const App = {
+    currentUser: null,
+    currentSection: 'dashboard',
+    calendarWeekOffset: 0,
+    bookingStep: 1,
+    bookingData: {},
+    bookingMonth: new Date(),
+    confirmCallback: null,
+    weeklyChart: null,
+    revenueChart: null,
+    servicesChart: null,
+    occupancyChart: null,
+    dashboardFilter: 'today',
+    session: {
+        timeoutMs: 2 * 60 * 60 * 1000, // 2 horas de inactividad
+        started: false,
+        timerId: null,
+        lastActivityAt: 0,
+        activityHandler: null,
+        visibilityHandler: null,
+        activityEvents: ['pointerdown', 'keydown', 'scroll', 'touchstart', 'mousemove'],
+
+        start() {
+            if (!App.currentUser) return;
+            if (!this.activityHandler) {
+                this.activityHandler = (event) => this.touch(event && event.type ? event.type : 'activity');
+            }
+            if (!this.visibilityHandler) {
+                this.visibilityHandler = () => {
+                    if (document.visibilityState === 'visible') this.touch('visibilitychange');
+                };
+            }
+            if (!this.started) {
+                this.activityEvents.forEach(eventName => {
+                    window.addEventListener(eventName, this.activityHandler, { passive: true });
+                });
+                document.addEventListener('visibilitychange', this.visibilityHandler);
+                this.started = true;
+            }
+            this.touch('start', true);
+        },
+
+        stop() {
+            if (this.timerId) {
+                clearTimeout(this.timerId);
+                this.timerId = null;
+            }
+            if (!this.started) return;
+            this.activityEvents.forEach(eventName => {
+                window.removeEventListener(eventName, this.activityHandler, { passive: true });
+            });
+            document.removeEventListener('visibilitychange', this.visibilityHandler);
+            this.started = false;
+            this.lastActivityAt = 0;
+        },
+
+        touch(source, force = false) {
+            if (!App.currentUser) return;
+            const now = Date.now();
+            const eventName = String(source || 'activity');
+            const minGap = eventName === 'mousemove' ? 15000 : 1000;
+            if (!force && this.lastActivityAt && (now - this.lastActivityAt) < minGap) return;
+            this.lastActivityAt = now;
+            this.resetTimer();
+        },
+
+        resetTimer() {
+            if (this.timerId) clearTimeout(this.timerId);
+            this.timerId = setTimeout(() => {
+                this.handleTimeout().catch(err => console.error('Auto logout error:', err));
+            }, this.timeoutMs);
+        },
+
+        async handleTimeout() {
+            if (!App.currentUser) return;
+            await App.auth.logout({ reason: 'inactivity' });
+        }
+    },
+
+    // ---- INIT ----
+    async init() {
+        if (this.ui && typeof this.ui.initTheme === 'function') {
+            this.ui.initTheme();
+        }
+        let backendHandled = false;
+        if (this.backend && typeof this.backend.bootstrap === 'function') {
+            try {
+                backendHandled = await this.backend.bootstrap();
+            } catch (err) {
+                console.error('Supabase bootstrap error:', err);
+            }
+        }
+        if (!backendHandled) {
+            this.currentUser = this.store.get('currentUser');
+            if (this.currentUser) {
+                this.showApp();
+            }
+        }
+        if (!this.currentUser && this.auth && typeof this.auth.resetAuthForms === 'function') {
+            this.auth.resetAuthForms();
+            this.auth.showLogin();
+        }
+        this.ui.initRipple();
+        this.ui.initAnimationObserver();
+    },
+
+    // ---- STORE (localStorage wrapper) ----
+    store: {
+        get(key) { try { return JSON.parse(localStorage.getItem('ap_' + key)); } catch { return null; } },
+        set(key, val, options = {}) {
+            localStorage.setItem('ap_' + key, JSON.stringify(val));
+            if (!options.skipCloud && App.backend && typeof App.backend.shouldSyncKey === 'function' && App.backend.shouldSyncKey(key)) {
+                App.backend.queueStateUpsert(key, val);
+            }
+        },
+        remove(key, options = {}) {
+            localStorage.removeItem('ap_' + key);
+            if (!options.skipCloud && App.backend && typeof App.backend.shouldSyncKey === 'function' && App.backend.shouldSyncKey(key)) {
+                App.backend.queueStateDelete(key);
+            }
+        },
+        getList(key) { return this.get(key) || []; },
+        addToList(key, item) {
+            const list = this.getList(key);
+            item.id = item.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+            item.createdAt = item.createdAt || new Date().toISOString();
+            list.push(item);
+            this.set(key, list);
+            return item;
+        },
+        updateInList(key, id, updates) {
+            const list = this.getList(key);
+            const idx = list.findIndex(i => i.id === id);
+            if (idx !== -1) { Object.assign(list[idx], updates); this.set(key, list); }
+            return list[idx];
+        },
+        removeFromList(key, id) {
+            const list = this.getList(key).filter(i => i.id !== id);
+            this.set(key, list);
+        }
+    },
+
+    // ---- TOAST ----
+    toast: {
+        show(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<i class="fas ${icons[type]} toast-icon"></i><span class="toast-message">${message}</span><button class="toast-close" onclick="this.parentElement.classList.add('toast-out');setTimeout(()=>this.parentElement.remove(),300)"><i class="fas fa-times"></i></button>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.classList.add('toast-out'); setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+    },
+
+    // ---- MODAL ----
+    modal: {
+        open(title, bodyHTML) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-body').innerHTML = bodyHTML;
+            const overlay = document.getElementById('modal-overlay');
+            overlay.classList.remove('closing');
+            overlay.classList.add('active');
+            App.ui.initRipple();
+        },
+        close() {
+            const overlay = document.getElementById('modal-overlay');
+            overlay.classList.add('closing');
+            setTimeout(() => { overlay.classList.remove('active', 'closing'); }, 250);
+        }
+    },
+
+    // ---- CONFIRM ----
+    confirm: {
+        show(title, message, callback) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+            App.confirmCallback = callback;
+            document.getElementById('confirm-overlay').classList.add('active');
+        },
+        accept() {
+            if (App.confirmCallback) App.confirmCallback();
+            this.close();
+        },
+        close() {
+            document.getElementById('confirm-overlay').classList.remove('active');
+            App.confirmCallback = null;
+        }
+    },
+
+    // ---- NAVIGATION ----
+    navigate(section) {
+        document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const el = document.getElementById('section-' + section);
+        if (el) { el.classList.add('active'); el.style.animation = 'none'; el.offsetHeight; el.style.animation = ''; }
+        document.querySelectorAll(`[data-section="${section}"]`).forEach(nav => nav.classList.add('active'));
+        this.syncMobileTabs(section);
+        this.currentSection = section;
+        try {
+            if (section === 'dashboard' && this.dashboard && typeof this.dashboard.render === 'function') this.dashboard.render();
+            if (section === 'calendar') {
+                if (this.calendar && typeof this.calendar.render === 'function') this.calendar.render();
+                else {
+                    const grid = document.getElementById('calendar-grid');
+                    if (grid) grid.innerHTML = '<div class="empty-text" style="grid-column:1 / -1">No se pudo cargar el modulo de calendario.</div>';
+                }
+            }
+            if (section === 'clients' && this.clients && typeof this.clients.render === 'function') this.clients.render();
+            if (section === 'employees' && this.employees && typeof this.employees.render === 'function') this.employees.render();
+            if (section === 'services' && this.services && typeof this.services.render === 'function') this.services.render();
+            if (section === 'reports' && this.reports && typeof this.reports.render === 'function') this.reports.render();
+            if (section === 'settings' && this.settings && typeof this.settings.render === 'function') this.settings.render();
+            if (section === 'client-dashboard' && this.clientView && typeof this.clientView.render === 'function') this.clientView.render();
+            if (section === 'client-booking' && this.clientView && typeof this.clientView.renderBooking === 'function') this.clientView.renderBooking();
+            if (section === 'client-history' && this.clientView && typeof this.clientView.renderHistory === 'function') this.clientView.renderHistory();
+        } catch (err) {
+            console.error('Navigation render error:', err);
+            this.toast.show('Ocurrio un error al cargar la seccion', 'error');
+        }
+        if (this.ui && typeof this.ui.initCustomSelects === 'function') this.ui.initCustomSelects();
+        this.ui.closeMobileProfile();
+        this.ui.closeSidebar();
+    },
+
+    showApp() {
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('app-shell').style.display = 'flex';
+        const u = this.currentUser;
+        if (u && u.role === 'business') {
+            const normalizedCategory = this.normalizeBusinessCategory(u.category || 'barberia');
+            if (u.category !== normalizedCategory) {
+                u.category = normalizedCategory;
+                App.store.set('currentUser', u);
+                const users = App.store.getList('users');
+                const idx = users.findIndex(x => x.id === u.id);
+                if (idx !== -1) {
+                    users[idx] = u;
+                    App.store.set('users', users);
+                }
+            }
+        }
+        this.syncUserPanels(u);
+        this.applyBusinessVisualIdentity(u);
+        document.getElementById('app-shell').classList.toggle('role-client', u.role === 'client');
+        document.getElementById('app-shell').classList.toggle('role-business', u.role !== 'client');
+        this.updateMobileTabsByRole(u.role);
+        this.ui.closeMobileProfile();
+
+        // Show/hide sections based on role
+        const businessNav = document.querySelectorAll('.nav-item.business-only');
+        const clientNav = document.querySelectorAll('.nav-item.client-only');
+
+        if (u.role === 'client') {
+            document.getElementById('dashboard-welcome').textContent = u.name;
+            businessNav.forEach(n => n.style.display = 'none');
+            clientNav.forEach(n => n.style.display = '');
+            this.navigate('client-dashboard');
+        } else {
+            document.getElementById('dashboard-welcome').textContent = u.businessName || u.name;
+            businessNav.forEach(n => n.style.display = '');
+            clientNav.forEach(n => n.style.display = 'none');
+            this.navigate('dashboard');
+        }
+        if (this.session && typeof this.session.start === 'function') this.session.start();
+    },
+
+    updateMobileTabsByRole(role) {
+        document.querySelectorAll('.mobile-tabbar .mobile-tab').forEach(tab => {
+            const isBusiness = tab.classList.contains('business-only');
+            const isClient = tab.classList.contains('client-only');
+            if (role === 'client') {
+                tab.style.display = isClient ? '' : 'none';
+            } else {
+                tab.style.display = isBusiness ? '' : 'none';
+            }
+        });
+    },
+
+    syncMobileTabs(section) {
+        document.querySelectorAll('.mobile-tabbar .mobile-tab').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.mobileSection === section);
+        });
+    },
+
+    syncUserPanels(user) {
+        const u = user || this.currentUser || {};
+        const profileName = u.role === 'business' ? (u.businessName || u.name || 'Usuario') : (u.name || 'Usuario');
+        const roleLabel = u.role === 'business' ? this.getCategoryConfig(u).label : 'Cliente';
+        const initial = profileName ? profileName.charAt(0).toUpperCase() : 'U';
+
+        const assignText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        };
+
+        assignText('sidebar-avatar', initial);
+        assignText('sidebar-name', profileName);
+        assignText('sidebar-email', u.email || 'email@email.com');
+        assignText('mobile-avatar', initial);
+        assignText('mobile-user-name', profileName);
+        assignText('mobile-user-role', roleLabel);
+        assignText('mobile-profile-avatar', initial);
+        assignText('mobile-profile-name', profileName);
+        assignText('mobile-profile-role', roleLabel);
+        assignText('mobile-profile-email', u.email || 'Sin correo');
+        assignText('mobile-profile-phone', (this.phone && this.phone.format(u.phone)) || 'Sin telefono');
+        assignText('mobile-profile-address', u.address || 'Sin direccion');
+    },
+
+    // ---- HELPERS ----
+    normalizeBusinessCategory(category) {
+        const raw = String(category || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (
+            raw.includes('consult') ||
+            raw.includes('clinic') ||
+            raw.includes('medic') ||
+            raw.includes('dental')
+        ) {
+            return 'consultorio';
+        }
+        if (
+            raw.includes('salon') ||
+            raw.includes('belleza') ||
+            raw.includes('spa') ||
+            raw.includes('estetic')
+        ) {
+            return 'salon';
+        }
+        return 'barberia';
+    },
+    getCategoryConfig(categoryOrUser) {
+        const source = typeof categoryOrUser === 'object' && categoryOrUser
+            ? categoryOrUser.category
+            : categoryOrUser;
+        const key = this.normalizeBusinessCategory(source);
+        const catalog = {
+            barberia: {
+                key: 'barberia',
+                label: 'Barbería',
+                employeeLabel: 'Barbero',
+                employeeLabelPlural: 'Barberos',
+                serviceIcon: 'fa-cut',
+                employeeIcon: 'fa-user-tie',
+                businessIcon: 'fa-shop',
+                bookingDescription: 'Agenda de citas online disponible 24/7',
+                serviceIcons: ['fa-cut', 'fa-scissors', 'fa-user-tie', 'fa-star', 'fa-hand-sparkles', 'fa-gem', 'fa-magic']
+            },
+            salon: {
+                key: 'salon',
+                label: 'Salón de belleza',
+                employeeLabel: 'Especialista',
+                employeeLabelPlural: 'Especialistas',
+                serviceIcon: 'fa-spa',
+                employeeIcon: 'fa-user',
+                businessIcon: 'fa-spa',
+                bookingDescription: 'Agenda de citas de belleza online disponible 24/7',
+                serviceIcons: ['fa-spa', 'fa-paint-brush', 'fa-hand-sparkles', 'fa-magic', 'fa-gem', 'fa-star', 'fa-heart']
+            },
+            consultorio: {
+                key: 'consultorio',
+                label: 'Consultorio',
+                employeeLabel: 'Profesional',
+                employeeLabelPlural: 'Profesionales',
+                serviceIcon: 'fa-stethoscope',
+                employeeIcon: 'fa-user-doctor',
+                businessIcon: 'fa-hospital',
+                bookingDescription: 'Agenda de turnos y consultas online disponible 24/7',
+                serviceIcons: ['fa-stethoscope', 'fa-notes-medical', 'fa-briefcase-medical', 'fa-user-nurse', 'fa-syringe', 'fa-heart-pulse', 'fa-hospital-user']
+            }
+        };
+        return catalog[key] || catalog.barberia;
+    },
+    getServiceIconSet(categoryOrUser) {
+        return this.getCategoryConfig(categoryOrUser).serviceIcons;
+    },
+    applyBusinessVisualIdentity(user) {
+        const u = user || this.currentUser;
+        if (!u || u.role !== 'business') return;
+        const cfg = this.getCategoryConfig(u);
+
+        const setIcon = (selector, iconClass) => {
+            const icon = document.querySelector(selector);
+            if (!icon || !icon.classList) return;
+            const toRemove = Array.from(icon.classList).filter(c => c.startsWith('fa-') && c !== 'fas' && c !== 'far' && c !== 'fab');
+            toRemove.forEach(c => icon.classList.remove(c));
+            icon.classList.add(iconClass);
+        };
+
+        setIcon('.nav-item[data-section="employees"] i', cfg.employeeIcon);
+        setIcon('.nav-item[data-section="services"] i', cfg.serviceIcon);
+        setIcon('.mobile-tab[data-mobile-section="clients"] i', cfg.employeeIcon);
+        setIcon('.mobile-tab[data-mobile-section="settings"] i', cfg.businessIcon);
+    },
+    getBusinessKey(suffix) {
+        return this.currentUser ? this.currentUser.id + '_' + suffix : suffix;
+    },
+    getBizKey(bizId, suffix) {
+        return bizId + '_' + suffix;
+    },
+    formatDate(d) {
+        const date = new Date(d);
+        return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    },
+    // Convert 24h "HH:MM" to 12h "h:MM AM/PM"
+    formatTime(t) {
+        if (!t) return '';
+        const [hStr, mStr] = t.split(':');
+        let h = parseInt(hStr);
+        const m = mStr || '00';
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        if (h === 0) h = 12;
+        else if (h > 12) h -= 12;
+        return `${h}:${m} ${ampm}`;
+    },
+    // Convert 24h hour integer to 12h string
+    formatHour12(h) {
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        let h12 = h % 12;
+        if (h12 === 0) h12 = 12;
+        return `${h12}:00 ${ampm}`;
+    },
+    buildTimeOptions(selected, stepMinutes = 30) {
+        const picked = String(selected || '');
+        let html = '';
+        for (let total = 0; total < 24 * 60; total += stepMinutes) {
+            const h = Math.floor(total / 60);
+            const m = total % 60;
+            const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            html += `<option value="${value}" ${picked === value ? 'selected' : ''}>${this.formatTime(value)}</option>`;
+        }
+        return html;
+    },
+    formatCurrency(n) { return '₡' + Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0 }); },
+    uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+};
+
+// Force currency symbol with correct UTF-8 glyph.
+App.formatCurrency = function formatCurrencyCRC(n) {
+    return '₡' + Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0 });
+};
+
+// Centralized Costa Rica phone formatting and validation: +506 XXXX-XXXX
+App.phone = {
+    extractLocalDigits(value) {
+        let digits = String(value || '').replace(/\D/g, '');
+        if (digits.startsWith('506')) digits = digits.slice(3);
+        return digits.slice(0, 8);
+    },
+    format(value) {
+        const local = this.extractLocalDigits(value);
+        if (!local) return '';
+        if (local.length <= 4) return `+506 ${local}`;
+        return `+506 ${local.slice(0, 4)}-${local.slice(4)}`;
+    },
+    isValid(value) {
+        return /^\+506 \d{4}-\d{4}$/.test(String(value || '').trim());
+    }
+};
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    App.init().catch(err => console.error('App init error:', err));
+});

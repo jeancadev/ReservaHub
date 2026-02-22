@@ -1,0 +1,859 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReservaHub - Gestión de Citas</title>
+    <meta name="description" content="ReservaHub: Sistema profesional de gestión de citas y turnos para barberías, consultorios, dentistas y spas.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <link rel="stylesheet" href="css/styles.css?v=20260214p">
+</head>
+<body>
+
+<!-- ============ TOAST NOTIFICATIONS ============ -->
+<div id="toast-container"></div>
+
+<!-- ============ AUTH SCREENS ============ -->
+<section id="auth-screen" class="auth-screen">
+    <div class="auth-container animate-fade-in">
+        <div class="auth-logo">
+            <h1>ReservaHub</h1>
+        </div>
+
+        <!-- LOGIN FORM -->
+        <div id="login-form" class="auth-form">
+            <h2>Iniciar Sesión</h2>
+            <p class="auth-subtitle">Accede a tu cuenta para gestionar tus citas</p>
+            <form onsubmit="return App.auth.login(event)">
+                <div class="input-group">
+                    <label for="login-email">Correo electrónico</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="login-email" placeholder="tu@email.com" required autocomplete="username">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="login-password">Contraseña</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password">
+                    </div>
+                </div>
+                <p class="auth-switch"><a href="#" onclick="App.auth.showForgotPassword()">¿Olvidaste tu contraseña?</a></p>
+                <button type="submit" class="btn btn-primary btn-full ripple-btn">
+                    <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+                </button>
+            </form>
+            <p class="auth-switch">¿No tienes cuenta?</p>
+            <div class="auth-register-links">
+                <a href="#" class="auth-link-btn ripple-btn" onclick="App.auth.showClientRegister()">
+                    <i class="fas fa-user"></i> Soy Cliente
+                </a>
+                <a href="#" class="auth-link-btn business ripple-btn" onclick="App.auth.showBusinessRegister()">
+                    <i class="fas fa-store"></i> Tengo un Negocio
+                </a>
+            </div>
+        </div>
+
+        <!-- FORGOT PASSWORD FORM -->
+        <div id="forgot-form" class="auth-form" style="display:none">
+            <h2>Recuperar Contraseña</h2>
+            <p class="auth-subtitle">Te enviaremos un enlace para restablecer tu contraseña</p>
+            <form onsubmit="return App.auth.requestPasswordReset(event)" autocomplete="off">
+                <div class="input-group">
+                    <label for="forgot-email">Correo electrónico</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="forgot-email" placeholder="tu@email.com" required autocomplete="email">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full ripple-btn">
+                    <i class="fas fa-paper-plane"></i> Enviar enlace
+                </button>
+            </form>
+            <p class="auth-switch"><a href="#" onclick="App.auth.showLogin()">Volver al inicio de sesión</a></p>
+        </div>
+
+        <!-- RESET PASSWORD FORM -->
+        <div id="reset-form" class="auth-form" style="display:none">
+            <h2>Nueva Contraseña</h2>
+            <p class="auth-subtitle">Define una nueva contraseña para tu cuenta</p>
+            <form onsubmit="return App.auth.completePasswordReset(event)" autocomplete="off">
+                <div class="input-group">
+                    <label for="reset-password">Nueva contraseña</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="reset-password" placeholder="Mínimo 8 caracteres" required minlength="8" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="reset-confirm">Confirmar nueva contraseña</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="reset-confirm" placeholder="Repite tu nueva contraseña" required minlength="8" autocomplete="new-password">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full ripple-btn">
+                    <i class="fas fa-check"></i> Actualizar contraseña
+                </button>
+            </form>
+            <p class="auth-switch"><a href="#" onclick="App.auth.showLogin()">Volver al inicio de sesión</a></p>
+        </div>
+
+        <!-- REGISTER FORM -->
+        <div id="register-form" class="auth-form" style="display:none">
+            <h2>Crear Cuenta</h2>
+            <p class="auth-subtitle">Crea tu cuenta para empezar</p>
+
+            <div id="role-selector-group" class="role-selector">
+                <button type="button" class="role-btn active ripple-btn" data-role="business" onclick="App.auth.selectRole('business')">
+                    <i class="fas fa-store"></i> Negocio
+                </button>
+                <button type="button" class="role-btn ripple-btn" data-role="client" onclick="App.auth.selectRole('client')">
+                    <i class="fas fa-user"></i> Cliente
+                </button>
+            </div>
+
+            <form onsubmit="return App.auth.register(event)" autocomplete="off">
+                <input type="hidden" id="register-role" value="business">
+
+                <div class="input-group">
+                    <label for="register-name">Nombre completo</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="register-name" placeholder="Tu nombre" required autocomplete="off">
+                    </div>
+                </div>
+                <div id="business-name-group" class="input-group">
+                    <label for="register-business">Nombre del negocio</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-store"></i>
+                        <input type="text" id="register-business" placeholder="Mi Salón / Barbería / Consultorio" autocomplete="off">
+                    </div>
+                </div>
+                <div id="business-category-group" class="input-group">
+                    <label for="register-business-category">Tipo de negocio</label>
+                    <select id="register-business-category" class="select-input">
+                        <option value="barberia">Barbería</option>
+                        <option value="salon">Salón de belleza</option>
+                        <option value="consultorio">Consultorio</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="register-email">Correo electrónico</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="register-email" placeholder="tu@email.com" required autocomplete="off">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="register-phone">Teléfono</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-phone"></i>
+                        <input type="tel" id="register-phone" placeholder="+506 XXXX-XXXX" autocomplete="off">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="register-password">Contraseña</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="register-password" placeholder="Debe contener al menos 8 caracteres" required minlength="8" maxlength="8" oninput="App.auth.updatePasswordHints()" autocomplete="new-password">
+                    </div>
+                    <div class="password-strength is-empty" id="register-password-strength" aria-live="polite">
+                        <div class="password-strength-track">
+                            <span class="password-strength-fill"></span>
+                        </div>
+                        <small class="password-strength-label">Fortaleza: Débil</small>
+                    </div>
+                    <ul id="register-password-hints" class="password-hints">
+                        <li data-rule="upper"><i class="fas fa-circle"></i> Al menos una mayúscula</li>
+                        <li data-rule="lower"><i class="fas fa-circle"></i> Al menos una minúscula</li>
+                        <li data-rule="number"><i class="fas fa-circle"></i> Al menos un número</li>
+                        <li data-rule="special"><i class="fas fa-circle"></i> Al menos un carácter especial</li>
+                    </ul>
+                </div>
+                <div class="input-group">
+                    <label for="register-confirm">Confirmar contraseña</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="register-confirm" placeholder="Repite tu contraseña" required minlength="8" maxlength="8" autocomplete="new-password">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full ripple-btn">
+                    <i class="fas fa-user-plus"></i> Crear Cuenta
+                </button>
+            </form>
+            <p class="auth-switch">¿Ya tienes cuenta? <a href="#" onclick="App.auth.showLogin()">Inicia sesión</a></p>
+        </div>
+    </div>
+</section>
+
+<!-- ============ MAIN APP SHELL ============ -->
+<section id="app-shell" class="app-shell" style="display:none">
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <h1 class="sidebar-logo">ReservaHub</h1>
+            <p class="sidebar-tagline">Gestión de Citas</p>
+            <button class="sidebar-close" onclick="App.ui.toggleSidebar()"><i class="fas fa-times"></i></button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <!-- Business-only navigation -->
+            <a href="#" class="nav-item business-only active" data-section="dashboard" onclick="App.navigate('dashboard')">
+                <i class="fas fa-th-large"></i><span>Panel</span>
+            </a>
+            <a href="#" class="nav-item business-only" data-section="calendar" onclick="App.navigate('calendar')">
+                <i class="fas fa-calendar-alt"></i><span>Calendario</span>
+            </a>
+            <a href="#" class="nav-item business-only" data-section="clients" onclick="App.navigate('clients')">
+                <i class="fas fa-users"></i><span>Clientes</span>
+            </a>
+            <a href="#" class="nav-item business-only" data-section="employees" onclick="App.navigate('employees')">
+                <i class="fas fa-user-tie"></i><span>Empleados</span>
+            </a>
+            <a href="#" class="nav-item business-only" data-section="services" onclick="App.navigate('services')">
+                <i class="fas fa-concierge-bell"></i><span>Servicios</span>
+            </a>
+            <a href="#" class="nav-item business-only" data-section="reports" onclick="App.navigate('reports')">
+                <i class="fas fa-chart-bar"></i><span>Reportes</span>
+            </a>
+            <a href="#" class="nav-item business-only" data-section="settings" onclick="App.navigate('settings')">
+                <i class="fas fa-cog"></i><span>Configuración</span>
+            </a>
+            <!-- Client-only navigation -->
+            <a href="#" class="nav-item client-only" data-section="client-dashboard" onclick="App.navigate('client-dashboard')">
+                <i class="fas fa-th-large"></i><span>Mis Citas</span>
+            </a>
+            <a href="#" class="nav-item client-only" data-section="client-booking" onclick="App.clientView.showBooking()">
+                <i class="fas fa-calendar-plus"></i><span>Reservar Cita</span>
+            </a>
+            <a href="#" class="nav-item client-only" data-section="client-history" onclick="App.navigate('client-history')">
+                <i class="fas fa-history"></i><span>Mi Historial</span>
+            </a>
+            <a href="#" class="nav-item client-only" data-section="settings" onclick="App.navigate('settings')">
+                <i class="fas fa-user-cog"></i><span>Mi Perfil</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button type="button" class="theme-toggle-control ripple-btn" onclick="App.ui.toggleTheme()" aria-label="Cambiar tema">
+                <span class="theme-toggle-meta">
+                    <i class="fas fa-circle-half-stroke"></i>
+                    <span class="theme-toggle-title">Tema</span>
+                </span>
+                <span class="theme-toggle-right">
+                    <small class="theme-toggle-caption" data-theme-caption>Claro</small>
+                    <span class="theme-switch" data-theme-switch aria-hidden="true">
+                        <span class="theme-switch-knob"></span>
+                    </span>
+                </span>
+            </button>
+            <a href="#" class="logout-btn" onclick="App.auth.logout()">
+                <i class="fas fa-sign-out-alt"></i> Cerrar sesión
+            </a>
+        </div>
+    </aside>
+
+    <!-- MOBILE HEADER -->
+    <header class="mobile-header">
+        <button class="mobile-profile-trigger ripple-btn" onclick="App.ui.toggleMobileProfile()">
+            <div class="mobile-avatar" id="mobile-avatar">U</div>
+            <div class="mobile-user-meta">
+                <span id="mobile-user-name">Usuario</span>
+                <small id="mobile-user-role">Mi perfil</small>
+            </div>
+            <i class="fas fa-chevron-down"></i>
+        </button>
+        <button class="hamburger ripple-btn" aria-label="Abrir menu" onclick="App.ui.toggleSidebar()">
+            <i class="fas fa-bars"></i>
+        </button>
+    </header>
+
+    <div id="mobile-profile-panel" class="mobile-profile-panel" aria-hidden="true">
+        <div class="mobile-profile-card">
+            <div class="mobile-profile-head">
+                <div class="mobile-profile-avatar" id="mobile-profile-avatar">U</div>
+                <div class="mobile-profile-main">
+                    <strong id="mobile-profile-name">Usuario</strong>
+                    <small id="mobile-profile-role">Perfil</small>
+                </div>
+            </div>
+            <div class="mobile-profile-list">
+                <div class="mobile-profile-item">
+                    <i class="fas fa-envelope"></i>
+                    <span id="mobile-profile-email">email@email.com</span>
+                </div>
+                <div class="mobile-profile-item">
+                    <i class="fas fa-phone"></i>
+                    <span id="mobile-profile-phone">Sin telefono</span>
+                </div>
+                <div class="mobile-profile-item">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span id="mobile-profile-address">Sin direccion</span>
+                </div>
+            </div>
+            <div class="mobile-profile-actions">
+                <button type="button" class="mobile-theme-toggle ripple-btn" onclick="App.ui.toggleTheme()" aria-label="Cambiar tema">
+                    <span class="mobile-theme-meta">
+                        <i class="fas fa-circle-half-stroke"></i>
+                        <span>Tema</span>
+                    </span>
+                    <span class="theme-toggle-right">
+                        <small class="theme-toggle-caption" data-theme-caption>Claro</small>
+                        <span class="theme-switch" data-theme-switch aria-hidden="true">
+                            <span class="theme-switch-knob"></span>
+                        </span>
+                    </span>
+                </button>
+                <button type="button" class="btn btn-outline ripple-btn" onclick="App.ui.openProfileSettings()">
+                    <i class="fas fa-cog"></i> Configuracion
+                </button>
+                <button type="button" class="btn btn-danger ripple-btn" onclick="App.auth.logout()">
+                    <i class="fas fa-sign-out-alt"></i> Cerrar sesion
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <!-- ===== DASHBOARD ===== -->
+        <div id="section-dashboard" class="content-section active">
+            <div class="section-header animate-slide-down">
+                <div>
+                    <h2>Bienvenido, <span id="dashboard-welcome">Usuario</span></h2>
+                    <p class="section-subtitle">Aquí tienes un resumen de tu negocio</p>
+                </div>
+                <button class="btn btn-primary ripple-btn" onclick="App.appointments.showCreate()">
+                    <i class="fas fa-plus"></i> Nueva Cita
+                </button>
+            </div>
+
+            <div class="stats-grid animate-slide-up">
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Citas Hoy</span>
+                        <span class="stat-value counter" id="stat-today">0</span>
+                    </div>
+                    <div class="stat-icon blue"><i class="fas fa-calendar-day"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Próximas Citas</span>
+                        <span class="stat-value counter" id="stat-upcoming">0</span>
+                    </div>
+                    <div class="stat-icon yellow"><i class="fas fa-clock"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Ingresos del Mes</span>
+                        <span class="stat-value counter" id="stat-revenue">$0</span>
+                    </div>
+                    <div class="stat-icon green"><i class="fas fa-dollar-sign"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Ocupación</span>
+                        <span class="stat-value counter" id="stat-occupancy">0%</span>
+                    </div>
+                    <div class="stat-icon orange"><i class="fas fa-chart-line"></i></div>
+                </div>
+            </div>
+            <div class="dashboard-capacity-summary animate-fade-in" id="dashboard-capacity-summary">
+                Cupos de hoy: 0/0 usados
+            </div>
+
+            <div class="dashboard-table-section animate-fade-in">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-list"></i> Lista de Citas</h3>
+                        <div class="tab-group">
+                            <button class="tab-btn active ripple-btn" onclick="App.dashboard.filterAppointments('today')">Citas de Hoy (<span id="tab-today-count">0</span>)</button>
+                            <button class="tab-btn ripple-btn" onclick="App.dashboard.filterAppointments('upcoming')">Próximas Citas (<span id="tab-upcoming-count">0</span>)</button>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Hora</th>
+                                    <th>Cliente</th>
+                                    <th>Servicio</th>
+                                    <th>Profesional</th>
+                                    <th>Precio</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-appointments-list">
+                                <tr class="empty-row"><td colspan="7">No hay citas para mostrar</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-bottom-grid">
+                <div class="card animate-slide-left">
+                    <div class="card-header">
+                        <h3><i class="fas fa-calendar-week"></i> Citas de la Semana</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="weekly-chart"></canvas>
+                    </div>
+                </div>
+                <div class="card animate-slide-right">
+                    <div class="card-header">
+                        <h3><i class="fas fa-users"></i> Resumen Rápido</h3>
+                    </div>
+                    <div id="quick-summary" class="quick-summary">
+                        <p class="empty-text">No hay citas próximas</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== CALENDAR ===== -->
+        <div id="section-calendar" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Calendario</h2>
+                    <p class="section-subtitle">Gestiona la agenda de tu equipo</p>
+                </div>
+                <div class="calendar-controls">
+                    <select id="calendar-employee-filter" class="select-input" onchange="App.calendar.render()">
+                        <option value="all">Todos los profesionales</option>
+                    </select>
+                    <button class="btn btn-primary ripple-btn" onclick="App.appointments.showCreate()">
+                        <i class="fas fa-plus"></i> Nueva Cita
+                    </button>
+                </div>
+            </div>
+            <div class="calendar-nav">
+                <button class="btn btn-outline ripple-btn" onclick="App.calendar.prev()"><i class="fas fa-chevron-left"></i></button>
+                <h3 id="calendar-title">Semana Actual</h3>
+                <button class="btn btn-outline ripple-btn" onclick="App.calendar.next()"><i class="fas fa-chevron-right"></i></button>
+                <button class="btn btn-outline ripple-btn" onclick="App.calendar.goToday()">Hoy</button>
+            </div>
+            <div class="calendar-grid-wrapper">
+                <div class="calendar-grid" id="calendar-grid">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== CLIENTS ===== -->
+        <div id="section-clients" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Clientes</h2>
+                    <p class="section-subtitle">Gestiona tu cartera de clientes</p>
+                </div>
+                <div class="header-actions">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="clients-search" placeholder="Buscar cliente..." oninput="App.clients.search(this.value)">
+                    </div>
+                    <button class="btn btn-primary ripple-btn" onclick="App.clients.showCreate()">
+                        <i class="fas fa-plus"></i> Nuevo Cliente
+                    </button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Teléfono</th>
+                                <th>Email</th>
+                                <th>Visitas</th>
+                                <th>Última Visita</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clients-list">
+                            <tr class="empty-row"><td colspan="6">No hay clientes registrados</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== EMPLOYEES ===== -->
+        <div id="section-employees" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Empleados</h2>
+                    <p class="section-subtitle">Gestiona tu equipo de profesionales</p>
+                </div>
+                <button class="btn btn-primary ripple-btn" onclick="App.employees.showCreate()">
+                    <i class="fas fa-plus"></i> Nuevo Empleado
+                </button>
+            </div>
+            <div class="employees-grid" id="employees-grid">
+                <div class="empty-state animate-fade-in">
+                    <i class="fas fa-user-tie"></i>
+                    <p>No hay empleados registrados</p>
+                    <button class="btn btn-primary ripple-btn" onclick="App.employees.showCreate()">Agregar Empleado</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== SERVICES ===== -->
+        <div id="section-services" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Servicios</h2>
+                    <p class="section-subtitle">Define los servicios que ofreces</p>
+                </div>
+                <button class="btn btn-primary ripple-btn" onclick="App.services.showCreate()">
+                    <i class="fas fa-plus"></i> Nuevo Servicio
+                </button>
+            </div>
+            <div class="services-grid" id="services-grid">
+                <div class="empty-state animate-fade-in">
+                    <i class="fas fa-concierge-bell"></i>
+                    <p>No hay servicios registrados</p>
+                    <button class="btn btn-primary ripple-btn" onclick="App.services.showCreate()">Agregar Servicio</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== REPORTS ===== -->
+        <div id="section-reports" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Reportes</h2>
+                    <p class="section-subtitle">Analiza el rendimiento de tu negocio</p>
+                </div>
+                <div class="header-actions">
+                    <select id="report-period" class="select-input" onchange="App.reports.render()">
+                        <option value="week">Esta Semana</option>
+                        <option value="month" selected>Este Mes</option>
+                        <option value="year">Este Año</option>
+                    </select>
+                    <button class="btn btn-outline ripple-btn" onclick="App.reports.exportExcel()">
+                        <i class="fas fa-file-excel"></i> Exportar Excel
+                    </button>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Total Citas</span>
+                        <span class="stat-value" id="report-total-appts">0</span>
+                    </div>
+                    <div class="stat-icon blue"><i class="fas fa-calendar-check"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Ingresos</span>
+                        <span class="stat-value" id="report-revenue">$0</span>
+                    </div>
+                    <div class="stat-icon green"><i class="fas fa-dollar-sign"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Tasa Cancelación</span>
+                        <span class="stat-value" id="report-cancel-rate">0%</span>
+                    </div>
+                    <div class="stat-icon orange"><i class="fas fa-times-circle"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Clientes Nuevos</span>
+                        <span class="stat-value" id="report-new-clients">0</span>
+                    </div>
+                    <div class="stat-icon yellow"><i class="fas fa-user-plus"></i></div>
+                </div>
+            </div>
+            <div class="dashboard-bottom-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-area"></i> Ingresos</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="revenue-chart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-pie"></i> Servicios Populares</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="services-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-bar"></i> Ocupación por Profesional</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="occupancy-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== SETTINGS ===== -->
+        <div id="section-settings" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Configuración</h2>
+                    <p id="settings-subtitle" class="section-subtitle">Personaliza tu negocio</p>
+                </div>
+            </div>
+            <div class="settings-grid">
+                <div id="settings-business-card" class="card">
+                    <div class="card-header"><h3><i class="fas fa-store"></i> Datos del Negocio</h3></div>
+                    <div class="card-body">
+                        <form onsubmit="return App.settings.save(event)">
+                            <div class="input-group">
+                                <label>Nombre del negocio</label>
+                                <input type="text" id="settings-business-name" class="form-input" placeholder="Mi Negocio">
+                            </div>
+                            <div class="input-group">
+                                <label>Categoría</label>
+                                <select id="settings-category" class="form-input">
+                                    <option value="barberia">Barbería</option>
+                                    <option value="salon">Salón de belleza</option>
+                                    <option value="consultorio">Consultorio</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label>Teléfono</label>
+                                <input type="tel" id="settings-phone" class="form-input" placeholder="+506 XXXX-XXXX">
+                            </div>
+                            <div class="input-group">
+                                <label>Dirección</label>
+                                <input type="text" id="settings-address" class="form-input" placeholder="Calle, Ciudad">
+                            </div>
+                            <div class="input-group">
+                                <label>Descripción</label>
+                                <textarea id="settings-description" class="form-input" rows="3" placeholder="Describe tu negocio..."></textarea>
+                            </div>
+                            <div class="input-group">
+                                <label>Cupo diario máximo de citas</label>
+                                <input type="number" id="settings-daily-capacity" class="form-input" min="1" step="1" placeholder="20">
+                                <small style="display:block;margin-top:6px;color:var(--text-muted)">Define cuántas citas activas puede tener el negocio por día.</small>
+                            </div>
+                            <div class="input-group">
+                                <label>Límite por cliente por día</label>
+                                <input type="number" id="settings-client-daily-limit" class="form-input" min="1" step="1" placeholder="1">
+                                <small style="display:block;margin-top:6px;color:var(--text-muted)">Evita que un mismo cliente reserve demasiadas citas el mismo día.</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary ripple-btn"><i class="fas fa-save"></i> Guardar Cambios</button>
+                        </form>
+                    </div>
+                </div>
+                <div id="settings-schedule-card" class="card">
+                    <div class="card-header"><h3><i class="fas fa-clock"></i> Horario de Atención</h3></div>
+                    <div class="card-body">
+                        <form onsubmit="return App.settings.saveSchedule(event)">
+                            <div id="schedule-inputs">
+                                <!-- Generated by JS -->
+                            </div>
+                            <button type="submit" class="btn btn-primary ripple-btn"><i class="fas fa-save"></i> Guardar Horario</button>
+                        </form>
+                    </div>
+                </div>
+                <div id="settings-client-card" class="card" style="display:none">
+                    <div class="card-header"><h3><i class="fas fa-user-edit"></i> Mi Información</h3></div>
+                    <div class="card-body">
+                        <form onsubmit="return App.settings.saveClient(event)">
+                            <div class="input-group">
+                                <label>Nombre completo</label>
+                                <input type="text" id="settings-client-name" class="form-input" placeholder="Tu nombre" required>
+                            </div>
+                            <div class="input-group">
+                                <label>Correo electrónico</label>
+                                <input type="email" id="settings-client-email" class="form-input" placeholder="tu@email.com" required>
+                            </div>
+                            <div class="input-group">
+                                <label>Teléfono</label>
+                                <input type="tel" id="settings-client-phone" class="form-input" placeholder="+506 XXXX-XXXX" required>
+                            </div>
+                            <div class="input-group">
+                                <label>Dirección</label>
+                                <input type="text" id="settings-client-address" class="form-input" placeholder="Calle, Ciudad">
+                            </div>
+                            <button type="submit" class="btn btn-primary ripple-btn"><i class="fas fa-save"></i> Guardar Cambios</button>
+                        </form>
+                    </div>
+                </div>
+                <!-- Danger Zone: Delete Account (visible for both roles) -->
+                <div id="settings-danger-zone" class="card danger-zone-card">
+                    <div class="card-header"><h3><i class="fas fa-exclamation-triangle"></i> Zona de Peligro</h3></div>
+                    <div class="card-body">
+                        <p class="danger-zone-text">
+                            <i class="fas fa-shield-alt"></i>
+                            Al eliminar tu cuenta, se borrarán <strong>permanentemente</strong> todos tus datos incluyendo citas, clientes, servicios, empleados y configuraciones. Esta acción <strong>no se puede deshacer</strong>.
+                        </p>
+                        <button type="button" class="btn btn-danger ripple-btn" onclick="App.settings.deleteAccount()">
+                            <i class="fas fa-trash-alt"></i> Eliminar mi cuenta permanentemente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== CLIENT DASHBOARD ===== -->
+        <div id="section-client-dashboard" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Mis Citas</h2>
+                    <p class="section-subtitle">Gestiona tus reservas</p>
+                </div>
+                <button class="btn btn-primary ripple-btn" onclick="App.clientView.showBooking()">
+                    <i class="fas fa-plus"></i> Nueva Reserva
+                </button>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Próximas Citas</span>
+                        <span class="stat-value" id="client-upcoming">0</span>
+                    </div>
+                    <div class="stat-icon blue"><i class="fas fa-calendar-check"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
+                        <span class="stat-label">Total Visitas</span>
+                        <span class="stat-value" id="client-total-visits">0</span>
+                    </div>
+                    <div class="stat-icon green"><i class="fas fa-history"></i></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h3><i class="fas fa-list"></i> Todas mis Citas</h3></div>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Hora</th>
+                                <th>Servicio</th>
+                                <th>Profesional</th>
+                                <th>Negocio</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="client-appointments-list">
+                            <tr class="empty-row"><td colspan="6">No hay citas aún. ¡Reserva tu primera cita!</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== CLIENT BOOKING (in-app wizard) ===== -->
+        <div id="section-client-booking" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Reservar Cita</h2>
+                    <p class="section-subtitle">Encuentra el servicio perfecto para ti</p>
+                </div>
+            </div>
+            <div id="client-booking-content" class="client-booking-wizard">
+                <!-- Generated by JS -->
+            </div>
+        </div>
+
+        <!-- ===== CLIENT HISTORY ===== -->
+        <div id="section-client-history" class="content-section">
+            <div class="section-header">
+                <div>
+                    <h2>Mi Historial</h2>
+                    <p class="section-subtitle">Visitas anteriores completadas</p>
+                </div>
+            </div>
+            <div id="client-history-content">
+                <!-- Generated by JS -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MOBILE TAB BAR -->
+    <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="Navegacion movil">
+        <button type="button" class="mobile-tab business-only active" data-mobile-section="dashboard" onclick="App.navigate('dashboard')">
+            <i class="fas fa-th-large"></i><span>Inicio</span>
+        </button>
+        <button type="button" class="mobile-tab business-only" data-mobile-section="calendar" onclick="App.navigate('calendar')">
+            <i class="fas fa-calendar-alt"></i><span>Agenda</span>
+        </button>
+        <button type="button" class="mobile-tab business-only" data-mobile-section="clients" onclick="App.navigate('clients')">
+            <i class="fas fa-users"></i><span>Clientes</span>
+        </button>
+        <button type="button" class="mobile-tab business-only" data-mobile-section="reports" onclick="App.navigate('reports')">
+            <i class="fas fa-chart-line"></i><span>Ventas</span>
+        </button>
+        <button type="button" class="mobile-tab business-only" data-mobile-section="settings" onclick="App.navigate('settings')">
+            <i class="fas fa-cog"></i><span>Config.</span>
+        </button>
+
+        <button type="button" class="mobile-tab client-only" data-mobile-section="client-dashboard" onclick="App.navigate('client-dashboard')">
+            <i class="fas fa-calendar-check"></i><span>Mis Citas</span>
+        </button>
+        <button type="button" class="mobile-tab client-only" data-mobile-section="client-booking" onclick="App.clientView.showBooking()">
+            <i class="fas fa-calendar-plus"></i><span>Reservar</span>
+        </button>
+        <button type="button" class="mobile-tab client-only" data-mobile-section="client-history" onclick="App.navigate('client-history')">
+            <i class="fas fa-history"></i><span>Historial</span>
+        </button>
+        <button type="button" class="mobile-tab client-only" data-mobile-section="settings" onclick="App.navigate('settings')">
+            <i class="fas fa-user-cog"></i><span>Perfil</span>
+        </button>
+    </nav>
+</section>
+
+<!-- ============ MODALS ============ -->
+<div id="modal-overlay" class="modal-overlay" onclick="App.modal.close()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="modal-title">Modal</h3>
+            <button class="modal-close ripple-btn" onclick="App.modal.close()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" id="modal-body">
+            <!-- Dynamic content -->
+        </div>
+    </div>
+</div>
+
+<!-- ============ CONFIRM DIALOG ============ -->
+<div id="confirm-overlay" class="modal-overlay confirm-overlay" onclick="App.confirm.close()">
+    <div class="confirm-dialog" onclick="event.stopPropagation()">
+        <div class="confirm-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <h3 id="confirm-title">¿Estás seguro?</h3>
+        <p id="confirm-message">Esta acción no se puede deshacer.</p>
+        <div class="confirm-actions">
+            <button class="btn btn-outline ripple-btn" onclick="App.confirm.close()">Cancelar</button>
+            <button class="btn btn-danger ripple-btn" id="confirm-btn" onclick="App.confirm.accept()">Eliminar</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/app.js?v=20260222b"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-backend.js?v=20260222a"></script>
+<script src="js/auth.js?v=20260222c"></script>
+<script src="js/ui.js?v=20260214p"></script>
+<script src="js/dashboard.js?v=20260214p"></script>
+<script src="js/appointments.js?v=20260214p"></script>
+<script src="js/services-employees.js?v=20260214p"></script>
+<script src="js/clients.js?v=20260214p"></script>
+<script src="js/calendar.js?v=20260214p"></script>
+<script src="js/reports.js?v=20260214p"></script>
+<script src="js/settings-clientview.js?v=20260222b"></script>
+</body>
+</html>
+
+
