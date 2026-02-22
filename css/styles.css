@@ -651,7 +651,7 @@ button {
     align-items: center;
 }
 
-.input-wrapper i {
+.input-wrapper>i:not(.password-toggle i) {
     position: absolute;
     left: 14px;
     color: var(--text-muted);
@@ -682,6 +682,56 @@ button {
 .input-wrapper input:focus+i,
 .input-wrapper input:focus~i {
     color: var(--primary);
+}
+
+.password-toggle {
+    position: absolute;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: color var(--transition-base);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+.password-toggle:hover {
+    color: var(--primary);
+}
+
+.password-toggle:focus {
+    outline: none;
+}
+
+.password-toggle i {
+    position: static;
+    left: auto;
+    pointer-events: none;
+}
+
+/* Hide default browser password reveal icon */
+input::-ms-reveal,
+input::-ms-clear {
+    display: none !important;
+}
+
+.input-wrapper input {
+    width: 100%;
+    padding: 12px 42px;
+    /* make space for icons on both sides */
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    font-family: var(--font);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    transition: all var(--transition-base);
+    outline: none;
 }
 
 /* Form Inputs (without icon) */
@@ -5732,4 +5782,27 @@ select.premium-select-source {
     padding: 13px;
     font-size: 0.95rem;
     letter-spacing: 0.3px;
+}
+
+/* --- Additional Responsive Refinements --- */
+@media (max-width: 480px) {
+    .auth-container {
+        padding: 24px 20px;
+        border-radius: 24px;
+    }
+
+    .stats-grid,
+    .dashboard-bottom-grid,
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-container {
+        min-height: 200px;
+    }
+
+    .table-wrapper {
+        margin-inline: -12px;
+        padding-inline: 12px;
+    }
 }

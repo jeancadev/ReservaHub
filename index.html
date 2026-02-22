@@ -40,8 +40,11 @@
                 <div class="input-group">
                     <label for="login-password">Contraseña</label>
                     <div class="input-wrapper">
-                        <i class="fas fa-lock"></i>
+                        <i class="fas fa-lock input-icon-left"></i>
                         <input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password">
+                        <button type="button" class="password-toggle" onclick="App.auth.togglePasswordVisibility('login-password', this)" aria-label="Mostrar contraseña">
+                            <i class="fas fa-eye"></i>
+                        </button>
                     </div>
                 </div>
                 <p class="auth-switch"><a href="#" onclick="App.auth.showForgotPassword()">¿Olvidaste tu contraseña?</a></p>
@@ -87,15 +90,21 @@
                 <div class="input-group">
                     <label for="reset-password">Nueva contraseña</label>
                     <div class="input-wrapper">
-                        <i class="fas fa-lock"></i>
+                        <i class="fas fa-lock input-icon-left"></i>
                         <input type="password" id="reset-password" placeholder="Mínimo 8 caracteres" required minlength="8" autocomplete="new-password">
+                        <button type="button" class="password-toggle" onclick="App.auth.togglePasswordVisibility('reset-password', this)" aria-label="Mostrar contraseña">
+                            <i class="fas fa-eye"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="input-group">
                     <label for="reset-confirm">Confirmar nueva contraseña</label>
                     <div class="input-wrapper">
-                        <i class="fas fa-lock"></i>
+                        <i class="fas fa-lock input-icon-left"></i>
                         <input type="password" id="reset-confirm" placeholder="Repite tu nueva contraseña" required minlength="8" autocomplete="new-password">
+                        <button type="button" class="password-toggle" onclick="App.auth.togglePasswordVisibility('reset-confirm', this)" aria-label="Mostrar contraseña">
+                            <i class="fas fa-eye"></i>
+                        </button>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-full ripple-btn">
@@ -161,8 +170,11 @@
                 <div class="input-group">
                     <label for="register-password">Contraseña</label>
                     <div class="input-wrapper">
-                        <i class="fas fa-lock"></i>
+                        <i class="fas fa-lock input-icon-left"></i>
                         <input type="password" id="register-password" placeholder="Debe contener al menos 8 caracteres" required minlength="8" maxlength="8" oninput="App.auth.updatePasswordHints()" autocomplete="new-password">
+                        <button type="button" class="password-toggle" onclick="App.auth.togglePasswordVisibility('register-password', this)" aria-label="Mostrar contraseña">
+                            <i class="fas fa-eye"></i>
+                        </button>
                     </div>
                     <div class="password-strength is-empty" id="register-password-strength" aria-live="polite">
                         <div class="password-strength-track">
@@ -180,8 +192,11 @@
                 <div class="input-group">
                     <label for="register-confirm">Confirmar contraseña</label>
                     <div class="input-wrapper">
-                        <i class="fas fa-lock"></i>
+                        <i class="fas fa-lock input-icon-left"></i>
                         <input type="password" id="register-confirm" placeholder="Repite tu contraseña" required minlength="8" maxlength="8" autocomplete="new-password">
+                        <button type="button" class="password-toggle" onclick="App.auth.togglePasswordVisibility('register-confirm', this)" aria-label="Mostrar contraseña">
+                            <i class="fas fa-eye"></i>
+                        </button>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-full ripple-btn">
