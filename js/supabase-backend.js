@@ -5,6 +5,7 @@
 (() => {
     const SUPABASE_URL = 'https://znplrsasplrrzrqgexcr.supabase.co';
     const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_0Jt40ZNqZRGgQj4raCnPVw_oPAqN8eu';
+    const MEDIA_BUCKET = 'reservahub-media';
     const LOCAL_ONLY_KEYS = new Set(['currentUser', 'users', 'theme']);
 
     function clone(value) {
@@ -88,6 +89,10 @@
             return this.enabled && !!this.authUserId;
         },
 
+        isStorageReady() {
+            return this.isCloudReady() && !!(this.client && this.client.storage);
+        },
+
         shouldSyncKey(key) {
             return !!key && !LOCAL_ONLY_KEYS.has(String(key));
         },
@@ -166,6 +171,8 @@
                 category: role === 'business' ? normalizedCategory : '',
                 address: row.address || '',
                 description: row.description || '',
+                businessPhoto: role === 'business' ? (row.business_photo_url || '') : '',
+                businessPhotoPath: role === 'business' ? (row.business_photo_path || '') : '',
                 createdAt: row.created_at || new Date().toISOString()
             };
         },
@@ -186,6 +193,8 @@
                     : null,
                 address: user.address || '',
                 description: user.description || '',
+                business_photo_url: role === 'business' ? (user.businessPhoto || '') : '',
+                business_photo_path: role === 'business' ? (user.businessPhotoPath || '') : '',
                 created_at: user.createdAt || new Date().toISOString()
             };
         },
@@ -250,6 +259,8 @@
                     : null,
                 address: metadata.address || '',
                 description: metadata.description || '',
+                business_photo_url: '',
+                business_photo_path: '',
                 created_at: new Date().toISOString()
             };
             const { error: insertError } = await this.client
@@ -309,6 +320,8 @@
                     : null,
                 address: '',
                 description: '',
+                business_photo_url: '',
+                business_photo_path: '',
                 created_at: new Date().toISOString()
             };
 
@@ -364,6 +377,48 @@
             return { changed: true };
         },
 
+        _safePathPart(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9._-]/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '') || 'file';
+        },
+
+        _buildPhotoPath(ownerId, scope, originalName) {
+            const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const owner = this._safePathPart(ownerId);
+            const safeScope = this._safePathPart(scope || 'profile');
+            return `users/${owner}/${safeScope}/${stamp}.jpg`;
+        },
+
+        async uploadPhotoBlob({ blob, ownerId, scope, originalName }) {
+            if (!this.isStorageReady()) throw new Error('Storage no disponible');
+            if (!blob) throw new Error('Archivo vacio');
+
+            const path = this._buildPhotoPath(ownerId || this.authUserId, scope, originalName);
+            const { error: uploadError } = await this.client.storage
+                .from(MEDIA_BUCKET)
+                .upload(path, blob, {
+                    upsert: false,
+                    contentType: blob.type || 'image/jpeg',
+                    cacheControl: '31536000'
+                });
+            if (uploadError) throw uploadError;
+
+            const { data } = this.client.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+            const url = data && data.publicUrl ? data.publicUrl : '';
+            return { path, url };
+        },
+
+        async removeStoragePath(path) {
+            if (!this.isStorageReady()) return;
+            const clean = String(path || '').trim();
+            if (!clean) return;
+            const { error } = await this.client.storage.from(MEDIA_BUCKET).remove([clean]);
+            if (error) console.error('Supabase storage remove error:', error);
+        },
+
         async deleteCurrentAccountData(user) {
             if (!this.isCloudReady() || !user || !user.id) return;
             const likeUserKeys = `${user.id}_%`;
@@ -403,7 +458,9 @@
                 message.includes('relation') ||
                 message.includes('does not exist') ||
                 message.includes('app_state') ||
-                message.includes('profiles');
+                message.includes('profiles') ||
+                message.includes('storage') ||
+                message.includes(MEDIA_BUCKET);
             if (missingSchema && !this._setupWarningShown && App.toast && typeof App.toast.show === 'function') {
                 this._setupWarningShown = true;
                 App.toast.show('Falta configurar tablas en Supabase. Ejecuta SUPABASE_SETUP.sql.', 'warning');

@@ -1226,6 +1226,13 @@ input::-ms-clear {
     flex-shrink: 0;
 }
 
+.user-avatar.has-photo {
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    background: var(--bg-input);
+}
+
 .user-details {
     overflow: hidden;
 }
@@ -1312,6 +1319,13 @@ input::-ms-clear {
     justify-content: center;
     font-weight: 700;
     font-size: 0.8rem;
+}
+
+.mobile-avatar.has-photo {
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    background: var(--bg-input);
 }
 
 /* --- Main Content --- */
@@ -2341,6 +2355,32 @@ input::-ms-clear {
     transition: transform var(--transition-spring);
 }
 
+.employee-avatar.has-photo {
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    background: var(--bg-input);
+}
+
+.avatar-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: inherit;
+}
+
+.settings-photo-preview-wrap {
+    margin-top: 10px;
+}
+
+.settings-photo-preview {
+    width: 64px;
+    height: 64px;
+    font-size: 1.25rem;
+    margin-bottom: 0;
+}
+
 .employee-card:hover .employee-avatar {
     transform: scale(1.1);
 }
@@ -3263,6 +3303,13 @@ input::-ms-clear {
     cursor: pointer;
     transition: all var(--transition-smooth);
     box-shadow: var(--shadow-sm);
+}
+
+.booking-option .employee-avatar {
+    margin: 0 auto 12px;
+    width: 56px;
+    height: 56px;
+    font-size: 1.5rem;
 }
 
 .booking-option:hover {
@@ -4297,6 +4344,13 @@ input::-ms-clear {
     justify-content: center;
     font-size: 0.82rem;
     font-weight: 700;
+}
+
+.mobile-profile-avatar.has-photo {
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    background: var(--bg-input);
 }
 
 .mobile-profile-main {

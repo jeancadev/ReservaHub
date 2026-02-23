@@ -17,6 +17,9 @@ create table if not exists public.profiles (
     updated_at timestamptz not null default timezone('utc', now())
 );
 
+alter table public.profiles add column if not exists business_photo_url text default '';
+alter table public.profiles add column if not exists business_photo_path text default '';
+
 create table if not exists public.app_state (
     key text primary key,
     value jsonb not null default '{}'::jsonb,
@@ -130,3 +133,55 @@ on public.app_state
 for delete
 to authenticated
 using (auth.uid() is not null);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+    'reservahub-media',
+    'reservahub-media',
+    true,
+    10485760,
+    array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update
+set
+    public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists reservahub_media_insert_own on storage.objects;
+create policy reservahub_media_insert_own
+on storage.objects
+for insert
+to authenticated
+with check (
+    bucket_id = 'reservahub-media'
+    and (storage.foldername(name))[1] = 'users'
+    and (storage.foldername(name))[2] = auth.uid()::text
+);
+
+drop policy if exists reservahub_media_update_own on storage.objects;
+create policy reservahub_media_update_own
+on storage.objects
+for update
+to authenticated
+using (
+    bucket_id = 'reservahub-media'
+    and (storage.foldername(name))[1] = 'users'
+    and (storage.foldername(name))[2] = auth.uid()::text
+)
+with check (
+    bucket_id = 'reservahub-media'
+    and (storage.foldername(name))[1] = 'users'
+    and (storage.foldername(name))[2] = auth.uid()::text
+);
+
+drop policy if exists reservahub_media_delete_own on storage.objects;
+create policy reservahub_media_delete_own
+on storage.objects
+for delete
+to authenticated
+using (
+    bucket_id = 'reservahub-media'
+    and (storage.foldername(name))[1] = 'users'
+    and (storage.foldername(name))[2] = auth.uid()::text
+);

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260214p">
+    <link rel="stylesheet" href="css/styles.css?v=20260223a">
 </head>
 <body>
 
@@ -652,6 +652,17 @@
                                 <input type="text" id="settings-address" class="form-input" placeholder="Calle, Ciudad">
                             </div>
                             <div class="input-group">
+                                <label>Foto de perfil del negocio</label>
+                                <input type="file" id="settings-business-photo-file" class="form-input" accept="image/*" onchange="App.settings.onBusinessPhotoSelected(event)">
+                                <small style="display:block;margin-top:6px;color:var(--text-muted)">Selecciona una imagen desde tu dispositivo. Se comprimirá y subirá al servidor.</small>
+                                <div class="settings-photo-preview-wrap">
+                                    <div id="settings-business-photo-preview" class="employee-avatar settings-photo-preview">N</div>
+                                </div>
+                                <button type="button" class="btn btn-outline ripple-btn" style="margin-top:10px" onclick="App.settings.clearBusinessPhoto()">
+                                    <i class="fas fa-trash"></i> Quitar foto
+                                </button>
+                            </div>
+                            <div class="input-group">
                                 <label>Descripción</label>
                                 <textarea id="settings-description" class="form-input" rows="3" placeholder="Describe tu negocio..."></textarea>
                             </div>
@@ -856,18 +867,18 @@
     </div>
 </div>
 
-<script src="js/app.js?v=20260222b"></script>
+<script src="js/app.js?v=20260223b"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabase-backend.js?v=20260222a"></script>
+<script src="js/supabase-backend.js?v=20260223b"></script>
 <script src="js/auth.js?v=20260222c"></script>
 <script src="js/ui.js?v=20260214p"></script>
 <script src="js/dashboard.js?v=20260214p"></script>
 <script src="js/appointments.js?v=20260214p"></script>
-<script src="js/services-employees.js?v=20260214p"></script>
+<script src="js/services-employees.js?v=20260223b"></script>
 <script src="js/clients.js?v=20260214p"></script>
 <script src="js/calendar.js?v=20260214p"></script>
 <script src="js/reports.js?v=20260214p"></script>
-<script src="js/settings-clientview.js?v=20260222b"></script>
+<script src="js/settings-clientview.js?v=20260223b"></script>
 </body>
 </html>
 

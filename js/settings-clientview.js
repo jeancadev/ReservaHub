@@ -3,6 +3,10 @@
    ============================================ */
 
 App.settings = {
+    _pendingBusinessPhotoFile: null,
+    _pendingBusinessPhotoPreview: '',
+    _removeBusinessPhoto: false,
+
     render() {
         const u = App.currentUser;
         if (!u) return;
@@ -24,6 +28,16 @@ App.settings = {
         document.getElementById('settings-business-name').value = u.businessName || '';
         document.getElementById('settings-phone').value = (App.phone && App.phone.format(u.phone)) || '';
         document.getElementById('settings-address').value = u.address || '';
+        const businessPhotoInput = document.getElementById('settings-business-photo-file');
+        const businessPhoto = typeof App.getBusinessPhotoUrl === 'function'
+            ? App.getBusinessPhotoUrl(u)
+            : (u.businessPhoto || '');
+        if (businessPhotoInput) businessPhotoInput.value = '';
+        this._clearPendingBusinessPhotoPreview();
+        this._pendingBusinessPhotoFile = null;
+        this._removeBusinessPhoto = false;
+        u.businessPhoto = businessPhoto;
+        u.businessPhotoPath = String(u.businessPhotoPath || App.store.get(u.id + '_business_profile_photo_path') || '');
         document.getElementById('settings-description').value = u.description || '';
         document.getElementById('settings-category').value = App.normalizeBusinessCategory(u.category || 'barberia');
         const capacityInput = document.getElementById('settings-daily-capacity');
@@ -40,6 +54,7 @@ App.settings = {
                 : 1;
             clientLimitInput.value = limit;
         }
+        this.updateBusinessPhotoPreview();
         this.renderSchedule();
     },
 
@@ -134,6 +149,70 @@ App.settings = {
         endInput.value = end;
     },
 
+    _clearPendingBusinessPhotoPreview() {
+        const current = String(this._pendingBusinessPhotoPreview || '');
+        if (current.startsWith('blob:')) URL.revokeObjectURL(current);
+        this._pendingBusinessPhotoPreview = '';
+    },
+
+    onBusinessPhotoSelected(event) {
+        const input = event && event.target ? event.target : document.getElementById('settings-business-photo-file');
+        const file = input && input.files && input.files[0] ? input.files[0] : null;
+        this._clearPendingBusinessPhotoPreview();
+
+        if (!file) {
+            this._pendingBusinessPhotoFile = null;
+            this.updateBusinessPhotoPreview();
+            return;
+        }
+        if (!App.isValidImageFile || !App.isValidImageFile(file, 10 * 1024 * 1024)) {
+            App.toast.show('Selecciona una imagen valida (maximo 10MB).', 'error');
+            if (input) input.value = '';
+            this._pendingBusinessPhotoFile = null;
+            this.updateBusinessPhotoPreview();
+            return;
+        }
+
+        this._pendingBusinessPhotoFile = file;
+        this._pendingBusinessPhotoPreview = URL.createObjectURL(file);
+        this._removeBusinessPhoto = false;
+        this.updateBusinessPhotoPreview(this._pendingBusinessPhotoPreview);
+    },
+
+    clearBusinessPhoto() {
+        this._clearPendingBusinessPhotoPreview();
+        this._pendingBusinessPhotoFile = null;
+        this._removeBusinessPhoto = true;
+        const input = document.getElementById('settings-business-photo-file');
+        if (input) input.value = '';
+        this.updateBusinessPhotoPreview('');
+    },
+
+    updateBusinessPhotoPreview(photoOverride) {
+        const preview = document.getElementById('settings-business-photo-preview');
+        if (!preview) return;
+        const u = App.currentUser || {};
+        const baseName = u.businessName || u.name || 'Negocio';
+        const initial = baseName.charAt(0).toUpperCase();
+        let photoUrl = '';
+        if (photoOverride !== undefined) {
+            photoUrl = String(photoOverride || '');
+        } else if (this._removeBusinessPhoto) {
+            photoUrl = '';
+        } else if (this._pendingBusinessPhotoPreview) {
+            photoUrl = this._pendingBusinessPhotoPreview;
+        } else {
+            photoUrl = typeof App.getBusinessPhotoUrl === 'function'
+                ? App.getBusinessPhotoUrl(u)
+                : (u.businessPhoto || '');
+        }
+        if (typeof App.setAvatarElement === 'function') {
+            App.setAvatarElement(preview, initial, photoUrl);
+        } else {
+            preview.textContent = initial;
+        }
+    },
+
     async save(e) {
         e.preventDefault();
         const u = App.currentUser;
@@ -148,11 +227,71 @@ App.settings = {
             App.toast.show('El telefono debe usar el formato +506 XXXX-XXXX', 'error');
             return false;
         }
+        const previousBusinessPhotoPath = String(u.businessPhotoPath || App.store.get(u.id + '_business_profile_photo_path') || '');
+        let normalizedBusinessPhoto = typeof App.getBusinessPhotoUrl === 'function'
+            ? App.getBusinessPhotoUrl(u)
+            : (u.businessPhoto || '');
+        let nextBusinessPhotoPath = previousBusinessPhotoPath;
+        const hasPendingPhoto = !!this._pendingBusinessPhotoFile;
+        const shouldRemovePhoto = this._removeBusinessPhoto && !hasPendingPhoto;
+
+        if (hasPendingPhoto) {
+            const canUpload = App.backend
+                && typeof App.backend.isStorageReady === 'function'
+                && App.backend.isStorageReady();
+            if (!canUpload) {
+                App.toast.show('La carga de fotos requiere Supabase activo y sesion iniciada.', 'error');
+                return false;
+            }
+        }
+
+        if (hasPendingPhoto) {
+            try {
+                const compressed = await App.compressImageFile(this._pendingBusinessPhotoFile, {
+                    maxWidth: 1200,
+                    maxHeight: 1200,
+                    maxBytes: 450 * 1024,
+                    quality: 0.82,
+                    minQuality: 0.52
+                });
+                const upload = await App.backend.uploadPhotoBlob({
+                    blob: compressed.blob,
+                    ownerId: u.id,
+                    scope: 'business-photo',
+                    originalName: this._pendingBusinessPhotoFile.name
+                });
+                normalizedBusinessPhoto = upload.url;
+                nextBusinessPhotoPath = upload.path;
+                if (previousBusinessPhotoPath && previousBusinessPhotoPath !== nextBusinessPhotoPath) {
+                    await App.backend.removeStoragePath(previousBusinessPhotoPath);
+                }
+            } catch (err) {
+                console.error('Business photo upload error:', err);
+                App.toast.show('No se pudo subir la foto del negocio.', 'error');
+                return false;
+            }
+        } else if (shouldRemovePhoto) {
+            normalizedBusinessPhoto = '';
+            nextBusinessPhotoPath = '';
+            if (previousBusinessPhotoPath && App.backend && typeof App.backend.removeStoragePath === 'function') {
+                await App.backend.removeStoragePath(previousBusinessPhotoPath);
+            }
+        }
+
         u.businessName = document.getElementById('settings-business-name').value.trim();
         u.phone = normalizedBusinessPhone;
         u.address = document.getElementById('settings-address').value.trim();
+        u.businessPhoto = normalizedBusinessPhoto;
+        u.businessPhotoPath = nextBusinessPhotoPath;
         u.description = document.getElementById('settings-description').value.trim();
         u.category = App.normalizeBusinessCategory(document.getElementById('settings-category').value);
+        App.store.set(u.id + '_business_profile_photo', normalizedBusinessPhoto);
+        App.store.set(u.id + '_business_profile_photo_path', nextBusinessPhotoPath);
+        this._clearPendingBusinessPhotoPreview();
+        this._pendingBusinessPhotoFile = null;
+        this._removeBusinessPhoto = false;
+        const businessPhotoInput = document.getElementById('settings-business-photo-file');
+        if (businessPhotoInput) businessPhotoInput.value = '';
         const capacityInput = document.getElementById('settings-daily-capacity');
         let dailyCapacity = capacityInput ? Number(capacityInput.value) : NaN;
         if (!Number.isFinite(dailyCapacity) || dailyCapacity < 1) dailyCapacity = 20;
@@ -356,8 +495,22 @@ App.settings = {
 
                     if (isBusiness) {
                         const employees = App.store.getList(userId + '_employees');
+                        const businessPhotoPath = String(
+                            u.businessPhotoPath
+                            || App.store.get(userId + '_business_profile_photo_path')
+                            || ''
+                        );
+                        if (businessPhotoPath && App.backend && typeof App.backend.removeStoragePath === 'function') {
+                            await App.backend.removeStoragePath(businessPhotoPath);
+                        }
+                        if (App.backend && typeof App.backend.removeStoragePath === 'function') {
+                            for (let i = 0; i < employees.length; i += 1) {
+                                const photoPath = String(employees[i] && employees[i].photoPath ? employees[i].photoPath : '');
+                                if (photoPath) await App.backend.removeStoragePath(photoPath);
+                            }
+                        }
                         const suffixes = ['appointments', 'clients', 'services', 'employees', 'schedule',
-                                        'daily_capacity', 'client_daily_limit', 'lunch_break'];
+                                        'daily_capacity', 'client_daily_limit', 'lunch_break', 'business_profile_photo', 'business_profile_photo_path'];
                         suffixes.forEach(s => App.store.remove(userId + '_' + s));
 
                         employees.forEach(emp => App.store.remove('ap_' + userId + '_emp_avail_' + emp.id));
@@ -432,6 +585,24 @@ App.settings = {
    ============================================ */
 
 App.clientView = {
+    _renderAvatar(name, photoUrl) {
+        const displayName = String(name || '').trim();
+        const initial = (displayName.charAt(0) || 'U').toUpperCase();
+        const normalizedPhoto = typeof App.normalizePhotoUrl === 'function'
+            ? App.normalizePhotoUrl(photoUrl)
+            : String(photoUrl || '').trim();
+        if (!normalizedPhoto) {
+            return `<div class="employee-avatar">${initial}</div>`;
+        }
+        return `<div class="employee-avatar has-photo"><img class="avatar-image" src="${normalizedPhoto}" alt="Foto de perfil"></div>`;
+    },
+
+    _getBusinessPhoto(biz) {
+        if (!biz) return '';
+        if (typeof App.getBusinessPhotoUrl === 'function') return App.getBusinessPhotoUrl(biz);
+        return String(biz.businessPhoto || '').trim();
+    },
+
     // -- Main dashboard for client --
     render() {
         const u = App.currentUser;
@@ -518,7 +689,7 @@ App.clientView = {
             bodyHtml = '<h3 class="booking-section-title">Selecciona un negocio</h3><div class="booking-options-grid">';
             bodyHtml += businesses.map(biz => `
                 <div class="booking-option ${bd.bizId === biz.id ? 'selected' : ''}" onclick="App.clientView._selectBiz('${biz.id}')">
-                    <div class="employee-avatar" style="margin:0 auto 12px;width:56px;height:56px;font-size:1.5rem">${(biz.businessName || biz.name).charAt(0).toUpperCase()}</div>
+                    ${this._renderAvatar((biz.businessName || biz.name), this._getBusinessPhoto(biz))}
                     <h4>${biz.businessName || biz.name}</h4>
                     <p style="color:var(--text-muted);font-size:0.85rem">${App.getCategoryConfig(biz).label}</p>
                     ${biz.address ? `<p style="color:var(--text-muted);font-size:0.8rem"><i class="fas fa-map-marker-alt"></i> ${biz.address}</p>` : ''}
@@ -560,7 +731,7 @@ App.clientView = {
                     const availDays = avail ? avail.filter(d => d.available).map(d => d.day.slice(0, 3)).join(', ') : 'Lun-Sáb';
                     return `
                     <div class="booking-option ${bd.empId === e.id ? 'selected' : ''}" onclick="App.clientView._selectEmp('${e.id}')">
-                        <div class="employee-avatar" style="margin:0 auto 12px;width:56px;height:56px;font-size:1.5rem">${e.name.charAt(0).toUpperCase()}</div>
+                        ${this._renderAvatar(e.name, e.photoUrl)}
                         <h4>${e.name}</h4>
                         <p>${e.specialty || 'General'}</p>
                         <p style="font-size:0.8rem;color:var(--text-muted);margin-top:6px"><i class="fas fa-calendar-check"></i> ${availDays}</p>
@@ -593,6 +764,7 @@ App.clientView = {
         const biz = App.store.getList('users').find(u => u.id === bizId);
         App.clientBookingData.bizName = biz ? (biz.businessName || biz.name) : '';
         App.clientBookingData.bizAddress = biz ? (biz.address || '') : '';
+        App.clientBookingData.bizPhoto = biz ? this._getBusinessPhoto(biz) : '';
         this._renderBookingStep(document.getElementById('client-booking-content'));
     },
 
@@ -611,6 +783,7 @@ App.clientView = {
         bd.empId = empId;
         const emp = App.store.getList(App.getBizKey(bd.bizId, 'employees')).find(e => e.id === empId);
         bd.empName = emp ? emp.name : '';
+        bd.empPhoto = emp ? (emp.photoUrl || '') : '';
         this._renderBookingStep(document.getElementById('client-booking-content'));
     },
 

@@ -232,6 +232,15 @@ const App = {
         document.getElementById('app-shell').style.display = 'flex';
         const u = this.currentUser;
         if (u && u.role === 'business') {
+            const storedPhoto = this.normalizePhotoUrl(this.store.get(u.id + '_business_profile_photo'));
+            const storedPhotoPath = String(this.store.get(u.id + '_business_profile_photo_path') || '');
+            if (storedPhoto && !this.normalizePhotoUrl(u.businessPhoto || '')) {
+                u.businessPhoto = storedPhoto;
+                if (!u.businessPhotoPath && storedPhotoPath) u.businessPhotoPath = storedPhotoPath;
+                App.store.set('currentUser', u, { skipCloud: true });
+            }
+        }
+        if (u && u.role === 'business') {
             const normalizedCategory = this.normalizeBusinessCategory(u.category || 'barberia');
             if (u.category !== normalizedCategory) {
                 u.category = normalizedCategory;
@@ -292,6 +301,7 @@ const App = {
         const profileName = u.role === 'business' ? (u.businessName || u.name || 'Usuario') : (u.name || 'Usuario');
         const roleLabel = u.role === 'business' ? this.getCategoryConfig(u).label : 'Cliente';
         const initial = profileName ? profileName.charAt(0).toUpperCase() : 'U';
+        const profilePhoto = u.role === 'business' ? this.getBusinessPhotoUrl(u) : '';
 
         const assignText = (id, value) => {
             const el = document.getElementById(id);
@@ -310,9 +320,133 @@ const App = {
         assignText('mobile-profile-email', u.email || 'Sin correo');
         assignText('mobile-profile-phone', (this.phone && this.phone.format(u.phone)) || 'Sin telefono');
         assignText('mobile-profile-address', u.address || 'Sin direccion');
+
+        this.setAvatarElement('sidebar-avatar', initial, profilePhoto);
+        this.setAvatarElement('mobile-avatar', initial, profilePhoto);
+        this.setAvatarElement('mobile-profile-avatar', initial, profilePhoto);
     },
 
     // ---- HELPERS ----
+    normalizePhotoUrl(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        if (/^blob:[^\s"'<>]+$/i.test(raw)) return raw;
+        if (/^https?:\/\/[^\s"'<>]+$/i.test(raw)) return raw;
+        if (/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+$/i.test(raw)) return raw.replace(/\s+/g, '');
+        return '';
+    },
+    isValidImageFile(file, maxBytes = 10 * 1024 * 1024) {
+        if (!file) return false;
+        const mime = String(file.type || '').toLowerCase();
+        return mime.startsWith('image/') && Number(file.size || 0) > 0 && Number(file.size || 0) <= maxBytes;
+    },
+    loadImageFromFile(file) {
+        return new Promise((resolve, reject) => {
+            if (!file) {
+                reject(new Error('Archivo no valido'));
+                return;
+            }
+            const objectUrl = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                URL.revokeObjectURL(objectUrl);
+                resolve(img);
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                reject(new Error('No se pudo leer la imagen'));
+            };
+            img.src = objectUrl;
+        });
+    },
+    async compressImageFile(file, options = {}) {
+        if (!this.isValidImageFile(file)) throw new Error('Formato de imagen no soportado');
+
+        const maxWidth = Number(options.maxWidth || 1200);
+        const maxHeight = Number(options.maxHeight || 1200);
+        const maxBytes = Number(options.maxBytes || 450 * 1024);
+        const minQuality = Number(options.minQuality || 0.5);
+        let quality = Number(options.quality || 0.82);
+
+        const img = await this.loadImageFromFile(file);
+        const srcW = Number(img.naturalWidth || img.width || 0);
+        const srcH = Number(img.naturalHeight || img.height || 0);
+        if (!srcW || !srcH) throw new Error('Dimensiones invalidas');
+
+        const scale = Math.min(1, maxWidth / srcW, maxHeight / srcH);
+        const targetW = Math.max(1, Math.round(srcW * scale));
+        const targetH = Math.max(1, Math.round(srcH * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No se pudo procesar la imagen');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+
+        const toBlob = (q) => new Promise((resolve, reject) => {
+            canvas.toBlob(blob => {
+                if (!blob) {
+                    reject(new Error('No se pudo comprimir la imagen'));
+                    return;
+                }
+                resolve(blob);
+            }, 'image/jpeg', q);
+        });
+
+        let blob = await toBlob(quality);
+        while (blob.size > maxBytes && quality > minQuality) {
+            quality = Math.max(minQuality, quality - 0.08);
+            blob = await toBlob(quality);
+            if (quality <= minQuality) break;
+        }
+
+        return {
+            blob,
+            width: targetW,
+            height: targetH,
+            quality,
+            contentType: 'image/jpeg'
+        };
+    },
+    getBusinessPhotoUrl(user) {
+        const source = user || this.currentUser;
+        if (!source || !source.id) return '';
+        const direct = this.normalizePhotoUrl(source.businessPhoto || '');
+        if (direct) return direct;
+        return this.normalizePhotoUrl(this.store.get(source.id + '_business_profile_photo'));
+    },
+    setAvatarElement(elementOrId, initial, photoUrl) {
+        const el = typeof elementOrId === 'string'
+            ? document.getElementById(elementOrId)
+            : elementOrId;
+        if (!el) return;
+
+        const letter = (String(initial || 'U').charAt(0) || 'U').toUpperCase();
+        const normalizedPhoto = this.normalizePhotoUrl(photoUrl);
+
+        el.classList.remove('has-photo');
+        el.textContent = letter;
+
+        if (!normalizedPhoto) return;
+
+        const img = document.createElement('img');
+        img.className = 'avatar-image';
+        img.alt = 'Foto de perfil';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.src = normalizedPhoto;
+        img.onerror = () => {
+            el.classList.remove('has-photo');
+            el.textContent = letter;
+        };
+
+        el.textContent = '';
+        el.classList.add('has-photo');
+        el.appendChild(img);
+    },
     normalizeBusinessCategory(category) {
         const raw = String(category || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (

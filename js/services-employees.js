@@ -83,6 +83,18 @@ App.services = {
    ============================================ */
 
 App.employees = {
+    _renderAvatar(name, photoUrl) {
+        const displayName = String(name || '').trim();
+        const initial = (displayName.charAt(0) || 'U').toUpperCase();
+        const normalizedPhoto = typeof App.normalizePhotoUrl === 'function'
+            ? App.normalizePhotoUrl(photoUrl)
+            : String(photoUrl || '').trim();
+        if (!normalizedPhoto) {
+            return `<div class="employee-avatar">${initial}</div>`;
+        }
+        return `<div class="employee-avatar has-photo"><img class="avatar-image" src="${normalizedPhoto}" alt="Foto de perfil"></div>`;
+    },
+
     render() {
         const employees = App.store.getList(App.getBusinessKey('employees'));
         const grid = document.getElementById('employees-grid');
@@ -96,7 +108,7 @@ App.employees = {
             const activeDays = avail.filter(d => d.available).map(d => d.day.slice(0, 3)).join(', ') || 'No definido';
             return `
             <div class="employee-card animate-fade-up" style="animation-delay:${i * 0.08}s">
-                <div class="employee-avatar">${emp.name.charAt(0).toUpperCase()}</div>
+                ${this._renderAvatar(emp.name, emp.photoUrl)}
                 <h4>${emp.name}</h4>
                 <p><i class="fas fa-briefcase"></i> ${emp.specialty || 'General'}</p>
                 <p><i class="fas fa-envelope"></i> ${emp.email || '-'}</p>
@@ -231,6 +243,7 @@ App.employees = {
                 <div class="input-group"><label>Especialidad</label><input type="text" id="emp-specialty" class="form-input" placeholder="Ej: ${cfg.employeeLabel}, Especialista"></div>
                 <div class="input-group"><label>Email</label><input type="email" id="emp-email" class="form-input" placeholder="email@ejemplo.com"></div>
                 <div class="input-group"><label>Teléfono</label><input type="tel" id="emp-phone" class="form-input" placeholder="+506 XXXX-XXXX"></div>
+                <div class="input-group"><label>Foto de perfil</label><input type="file" id="emp-photo-file" class="form-input" accept="image/*"></div>
                 <button type="submit" class="btn btn-primary btn-full ripple-btn"><i class="fas fa-save"></i> Guardar</button>
             </form>
         `);
@@ -247,6 +260,8 @@ App.employees = {
                 <div class="input-group"><label>Especialidad</label><input type="text" id="emp-specialty" class="form-input" value="${emp.specialty || ''}"></div>
                 <div class="input-group"><label>Email</label><input type="email" id="emp-email" class="form-input" value="${emp.email || ''}"></div>
                 <div class="input-group"><label>Teléfono</label><input type="tel" id="emp-phone" class="form-input" value="${emp.phone || ''}"></div>
+                <div class="input-group"><label>Actualizar foto</label><input type="file" id="emp-photo-file" class="form-input" accept="image/*"></div>
+                ${(emp.photoUrl || emp.photoPath) ? '<div class="input-group"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="emp-photo-remove"> Quitar foto actual</label></div>' : ''}
                 <button type="submit" class="btn btn-primary btn-full ripple-btn"><i class="fas fa-save"></i> Actualizar</button>
             </form>
         `);
@@ -255,6 +270,18 @@ App.employees = {
 
     save(e, editId) {
         e.preventDefault();
+        this._saveAsync(editId);
+        return false;
+    },
+
+    async _saveAsync(editId) {
+        const currentList = App.store.getList(App.getBusinessKey('employees'));
+        const existing = editId ? currentList.find(emp => emp.id === editId) : null;
+        if (editId && !existing) {
+            App.toast.show('No se encontro el colaborador para editar.', 'error');
+            return false;
+        }
+
         const phoneInput = document.getElementById('emp-phone');
         const normalizedPhone = App.phone && typeof App.phone.format === 'function'
             ? App.phone.format(phoneInput ? phoneInput.value : '')
@@ -264,11 +291,70 @@ App.employees = {
             App.toast.show('El telefono debe usar el formato +506 XXXX-XXXX', 'error');
             return false;
         }
+        const fileInput = document.getElementById('emp-photo-file');
+        const selectedFile = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        const removePhotoCheckbox = document.getElementById('emp-photo-remove');
+        const shouldRemovePhoto = !!(removePhotoCheckbox && removePhotoCheckbox.checked);
+        if (selectedFile && (!App.isValidImageFile || !App.isValidImageFile(selectedFile, 10 * 1024 * 1024))) {
+            App.toast.show('Selecciona una imagen valida (maximo 10MB).', 'error');
+            return false;
+        }
+
+        const targetId = editId || App.uid();
+        let nextPhotoUrl = existing ? (existing.photoUrl || '') : '';
+        let nextPhotoPath = existing ? (existing.photoPath || '') : '';
+
+        if (selectedFile) {
+            const canUpload = App.backend
+                && typeof App.backend.isStorageReady === 'function'
+                && App.backend.isStorageReady();
+            if (!canUpload) {
+                App.toast.show('La carga de fotos requiere Supabase activo y sesion iniciada.', 'error');
+                return false;
+            }
+        }
+
+        if (selectedFile) {
+            try {
+                const compressed = await App.compressImageFile(selectedFile, {
+                    maxWidth: 1000,
+                    maxHeight: 1000,
+                    maxBytes: 380 * 1024,
+                    quality: 0.82,
+                    minQuality: 0.52
+                });
+                const upload = await App.backend.uploadPhotoBlob({
+                    blob: compressed.blob,
+                    ownerId: App.currentUser ? App.currentUser.id : '',
+                    scope: `employee-${targetId}`,
+                    originalName: selectedFile.name
+                });
+                if (nextPhotoPath && nextPhotoPath !== upload.path && App.backend.removeStoragePath) {
+                    await App.backend.removeStoragePath(nextPhotoPath);
+                }
+                nextPhotoUrl = upload.url;
+                nextPhotoPath = upload.path;
+            } catch (err) {
+                console.error('Employee photo upload error:', err);
+                App.toast.show('No se pudo subir la foto del colaborador.', 'error');
+                return false;
+            }
+        } else if (shouldRemovePhoto) {
+            if (nextPhotoPath && App.backend && typeof App.backend.removeStoragePath === 'function') {
+                await App.backend.removeStoragePath(nextPhotoPath);
+            }
+            nextPhotoUrl = '';
+            nextPhotoPath = '';
+        }
+
         const data = {
+            id: targetId,
             name: document.getElementById('emp-name').value.trim(),
             specialty: document.getElementById('emp-specialty').value.trim(),
             email: document.getElementById('emp-email').value.trim(),
-            phone: normalizedPhone
+            phone: normalizedPhone,
+            photoUrl: nextPhotoUrl,
+            photoPath: nextPhotoPath
         };
         if (editId) {
             App.store.updateInList(App.getBusinessKey('employees'), editId, data);
@@ -286,9 +372,18 @@ App.employees = {
 
     delete(id) {
         App.confirm.show('Eliminar Empleado', '¿Estás seguro de eliminar este empleado?', () => {
-            App.store.removeFromList(App.getBusinessKey('employees'), id);
-            App.toast.show('Empleado eliminado', 'warning');
-            this.render();
+            (async () => {
+                const emp = App.store.getList(App.getBusinessKey('employees')).find(x => x.id === id);
+                if (emp && emp.photoPath && App.backend && typeof App.backend.removeStoragePath === 'function') {
+                    await App.backend.removeStoragePath(emp.photoPath);
+                }
+                App.store.removeFromList(App.getBusinessKey('employees'), id);
+                App.toast.show('Empleado eliminado', 'warning');
+                this.render();
+            })().catch(err => {
+                console.error('Employee delete flow error:', err);
+                App.toast.show('No se pudo eliminar el colaborador.', 'error');
+            });
         });
     }
 };
