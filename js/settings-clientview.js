@@ -592,6 +592,7 @@ App.clientView = {
         App.clientBookingData.bizId = bizId;
         const biz = App.store.getList('users').find(u => u.id === bizId);
         App.clientBookingData.bizName = biz ? (biz.businessName || biz.name) : '';
+        App.clientBookingData.bizAddress = biz ? (biz.address || '') : '';
         this._renderBookingStep(document.getElementById('client-booking-content'));
     },
 
@@ -819,9 +820,11 @@ App.clientView = {
         const u = App.currentUser;
         const biz = App.store.getList('users').find(x => x.id === bd.bizId);
         const cfg = App.getCategoryConfig(biz || App.currentUser);
+        const bizAddress = (biz && biz.address) || bd.bizAddress || '';
         let html = '<h3 class="booking-section-title">Confirma tu reserva</h3>';
         html += '<div class="booking-summary-card">';
         html += `<div class="summary-row"><span><i class="fas ${cfg.businessIcon}"></i> Negocio</span><span>${bd.bizName || '-'}</span></div>`;
+        html += `<div class="summary-row"><span><i class="fas fa-map-marker-alt"></i> Direccion</span><span>${bizAddress || 'No especificada'}</span></div>`;
         html += `<div class="summary-row"><span><i class="fas ${cfg.serviceIcon}"></i> Servicio</span><span>${bd.serviceName || '-'}</span></div>`;
         html += `<div class="summary-row"><span><i class="fas ${cfg.employeeIcon}"></i> ${cfg.employeeLabel}</span><span>${bd.empName || '-'}</span></div>`;
         html += `<div class="summary-row"><span><i class="fas fa-calendar"></i> Fecha</span><span>${bd.date ? App.formatDate(bd.date) : '-'}</span></div>`;
