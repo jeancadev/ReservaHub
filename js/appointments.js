@@ -473,6 +473,7 @@ App.appointments = {
 
         const window = this._getScheduleWindow(date, employeeId, bizId);
         if (!window) return [];
+        const lunch = this._getLunchWindow(bizId);
 
         const now = new Date();
         const todayStr = now.toISOString().slice(0, 10);
@@ -482,6 +483,7 @@ App.appointments = {
 
         for (let min = window.start; min + duration <= window.end; min += step) {
             if (date === todayStr && min <= nowMinutes) continue;
+            if (lunch && this._rangesOverlap(min, min + duration, lunch.start, lunch.end)) continue;
             const candidate = this._minutesToTime(min);
             if (!this._hasConflict(date, employeeId, min, min + duration, ignoreId, bizId)) {
                 slots.push(candidate);
@@ -539,6 +541,26 @@ App.appointments = {
 
         if (end <= start) return null;
         return { start, end };
+    },
+
+    _getLunchWindow(bizId) {
+        const targetBizId = this._resolveBusinessId(bizId);
+        if (!targetBizId) return null;
+        const raw = App.store.get(targetBizId + '_lunch_break');
+        if (!raw || !raw.enabled) return null;
+
+        const parts = String(raw.start || '').split(':').map(Number);
+        const h = parts[0];
+        const m = parts[1];
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+        if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+
+        const start = (h * 60) + m;
+        return { start, end: start + 60 };
+    },
+
+    _rangesOverlap(startA, endA, startB, endB) {
+        return startA < endB && startB < endA;
     },
 
     _resolveBusinessId(bizId) {

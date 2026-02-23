@@ -75,6 +75,7 @@ App.calendar = {
                 html += `<div class="cal-time">${App.formatHour12(h)}</div>`;
 
                 weekDays.forEach(day => {
+                    const isLunchSlot = this._isLunchBlockedTime(day.dateStr, timeKey, employeeFilter);
                     const cellEvents = appointments
                         .filter(a => a.date === day.dateStr && Number(String(a.time || '').split(':')[0]) === h)
                         .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
@@ -84,9 +85,15 @@ App.calendar = {
                             <small>${App.formatTime(a.time)}</small> ${a.clientName || 'Cliente'}
                         </div>
                     `).join('');
+                    const lunchLabel = isLunchSlot && !cellEvents.length
+                        ? '<div class="cal-lunch-label"><i class="fas fa-utensils"></i> Almuerzo</div>'
+                        : '';
+                    const cellClass = `cal-cell${isLunchSlot ? ' lunch-blocked' : ''}`;
+                    const cellAction = isLunchSlot ? '' : `onclick="App.calendar.createFromCell('${day.dateStr}','${timeKey}')"`;
 
                     html += `
-                        <div class="cal-cell" onclick="App.calendar.createFromCell('${day.dateStr}','${timeKey}')">
+                        <div class="${cellClass}" ${cellAction}>
+                            ${lunchLabel}
                             ${eventsHtml}
                         </div>
                     `;
@@ -108,6 +115,10 @@ App.calendar = {
         }
         const filterEl = document.getElementById('calendar-employee-filter');
         const employeeId = filterEl && filterEl.value !== 'all' ? filterEl.value : '';
+        if (this._isLunchBlockedTime(date, time, employeeId || 'all')) {
+            App.toast.show('Horario bloqueado por almuerzo del equipo', 'warning');
+            return;
+        }
         App.appointments.showCreate({ date, time, employeeId });
     },
 
@@ -218,6 +229,7 @@ App.calendar = {
             const dayItems = appointments
                 .filter(a => a.date === day.dateStr)
                 .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+            const lunchWindow = this._getLunchWindowForDate(day.dateStr, employeeFilter);
 
             const itemsHtml = dayItems.length
                 ? dayItems.map(a => `
@@ -238,6 +250,7 @@ App.calendar = {
                         <div>
                             <h4>${day.short} ${day.display}</h4>
                             <p>${employeeName}</p>
+                            ${lunchWindow ? `<p class="cal-day-lunch"><i class="fas fa-utensils"></i> Bloqueado por almuerzo ${App.formatTime(lunchWindow.startStr)} - ${App.formatTime(lunchWindow.endStr)}</p>` : ''}
                             <span class="cal-capacity-pill ${cap && cap.isFull ? 'full' : 'open'}">
                                 ${cap ? `${cap.booked}/${cap.limit} ${cap.isFull ? 'sin cupo' : `(${cap.remaining} libres)`}` : ''}
                             </span>
@@ -277,6 +290,7 @@ App.calendar = {
         const range = this._getDayWindow(selectedDay.dateStr, employeeFilter);
         const startHour = range ? range.startHour : 9;
         const endHour = range ? range.endHour : 18;
+        const lunchWindow = this._getLunchWindowForDate(selectedDay.dateStr, employeeFilter);
 
         let timelineHtml = '';
         if (selectedCapacity && selectedCapacity.isFull) {
@@ -286,6 +300,7 @@ App.calendar = {
         } else {
             for (let h = startHour; h < endHour; h++) {
                 const slot = `${String(h).padStart(2, '0')}:00`;
+                const isLunchSlot = this._isLunchBlockedTime(selectedDay.dateStr, slot, employeeFilter);
                 const byHour = dayItems.filter(a => Number(String(a.time || '').split(':')[0]) === h);
                 const cards = byHour.map(a => {
                     const duration = Number(a.duration) || durationMap[a.serviceId] || 30;
@@ -298,12 +313,16 @@ App.calendar = {
                         </article>
                     `;
                 }).join('');
+                const line = isLunchSlot
+                    ? '<div class="cal-phone-line blocked"><span>Almuerzo</span></div>'
+                    : '<div class="cal-phone-line"></div>';
+                const rowAction = byHour.length || isLunchSlot ? '' : `onclick="App.calendar.createFromCell('${selectedDay.dateStr}','${slot}')"`;
 
                 timelineHtml += `
-                    <div class="cal-phone-row" onclick="${byHour.length ? '' : `App.calendar.createFromCell('${selectedDay.dateStr}','${slot}')`}">
+                    <div class="cal-phone-row ${isLunchSlot ? 'lunch-blocked' : ''}" ${rowAction}>
                         <span class="cal-phone-hour">${App.formatTime(slot)}</span>
                         <div class="cal-phone-row-main">
-                            ${cards || '<div class="cal-phone-line"></div>'}
+                            ${cards || line}
                         </div>
                     </div>
                 `;
@@ -329,6 +348,7 @@ App.calendar = {
                     <div class="cal-phone-avatar">${employeeName.charAt(0).toUpperCase()}</div>
                     <div class="cal-phone-employee-meta">
                         <span>${employeeName}</span>
+                        ${lunchWindow ? `<small class="cal-phone-lunch"><i class="fas fa-utensils"></i> Almuerzo ${App.formatTime(lunchWindow.startStr)} - ${App.formatTime(lunchWindow.endStr)}</small>` : ''}
                         <small class="cal-capacity-pill ${selectedCapacity && selectedCapacity.isFull ? 'full' : 'open'}">
                             ${selectedCapacity ? (selectedCapacity.isFull ? 'Sin cupo' : `${selectedCapacity.remaining} libres`) : ''}
                         </small>
@@ -390,6 +410,43 @@ App.calendar = {
     _getDayCapacity(dateStr) {
         if (!App.appointments || typeof App.appointments.getDailyAvailability !== 'function') return null;
         return App.appointments.getDailyAvailability(dateStr, null, App.currentUser && App.currentUser.id ? App.currentUser.id : null);
+    },
+
+    _getLunchConfig() {
+        if (!App.currentUser || !App.currentUser.id) return null;
+        const raw = App.store.get(App.currentUser.id + '_lunch_break');
+        if (!raw || !raw.enabled) return null;
+        const [h, m] = String(raw.start || '').split(':').map(Number);
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+        if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+        const start = (h * 60) + m;
+        const end = start + 60;
+        return { start, end };
+    },
+
+    _getLunchWindowForDate(dateStr, employeeFilter = 'all') {
+        const lunch = this._getLunchConfig();
+        if (!lunch) return null;
+        const dayWindow = this._getDayWindow(dateStr, employeeFilter || 'all');
+        if (!dayWindow) return null;
+        const dayStart = dayWindow.startHour * 60;
+        const dayEnd = dayWindow.endHour * 60;
+        const start = Math.max(dayStart, lunch.start);
+        const end = Math.min(dayEnd, lunch.end);
+        if (end <= start) return null;
+        return {
+            start,
+            end,
+            startStr: this._minutesToTime(start),
+            endStr: this._minutesToTime(end)
+        };
+    },
+
+    _isLunchBlockedTime(dateStr, time, employeeFilter = 'all') {
+        const lunch = this._getLunchWindowForDate(dateStr, employeeFilter || 'all');
+        if (!lunch) return false;
+        const minute = this._toMinutes(time);
+        return minute >= lunch.start && minute < lunch.end;
     },
 
     _toMinutes(time) {

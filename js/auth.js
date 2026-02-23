@@ -451,6 +451,11 @@ App.auth = {
             const days = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'];
             const schedule = days.map((d, i) => ({ day: d, open: i < 6, start: '09:00', end: '18:00' }));
             App.store.set(user.id + '_schedule', schedule);
+            App.store.set(user.id + '_lunch_break', {
+                enabled: false,
+                start: '13:00',
+                duration: 60
+            });
             App.store.set(user.id + '_daily_capacity', 20);
             App.store.set(user.id + '_client_daily_limit', 1);
         }

@@ -1770,6 +1770,29 @@ input::-ms-clear {
     background: var(--primary-bg);
 }
 
+.cal-cell.lunch-blocked {
+    cursor: not-allowed;
+    background: repeating-linear-gradient(-45deg, rgba(245, 158, 11, 0.14), rgba(245, 158, 11, 0.14) 8px, rgba(251, 191, 36, 0.08) 8px, rgba(251, 191, 36, 0.08) 16px);
+}
+
+.cal-cell.lunch-blocked:hover {
+    background: repeating-linear-gradient(-45deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.2) 8px, rgba(251, 191, 36, 0.12) 8px, rgba(251, 191, 36, 0.12) 16px);
+}
+
+.cal-lunch-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #8a4b00;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(245, 158, 11, 0.38);
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-bottom: 4px;
+}
+
 .cal-cell:last-child {
     border-right: none;
 }
@@ -1871,6 +1894,16 @@ input::-ms-clear {
 .cal-day-header p {
     font-size: 0.78rem;
     color: var(--text-muted);
+}
+
+.cal-day-lunch {
+    margin: 6px 0 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #8a4b00;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .cal-capacity-badge {
@@ -2089,6 +2122,14 @@ input::-ms-clear {
     color: #0f172a;
 }
 
+.cal-phone-lunch {
+    font-size: 0.68rem;
+    color: #b45309;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
 .cal-phone-timeline {
     background: #f8fafc;
     max-height: 56vh;
@@ -2120,6 +2161,25 @@ input::-ms-clear {
     border-radius: 8px;
     border: 1px dashed #dbe2ea;
     background: #ffffff;
+}
+
+.cal-phone-row.lunch-blocked {
+    cursor: not-allowed;
+}
+
+.cal-phone-line.blocked {
+    border-style: solid;
+    border-color: #f59e0b;
+    background: repeating-linear-gradient(-45deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.18) 8px, rgba(251, 191, 36, 0.12) 8px, rgba(251, 191, 36, 0.12) 16px);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+}
+
+.cal-phone-line.blocked span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #8a4b00;
 }
 
 .cal-phone-event {
@@ -3322,6 +3382,20 @@ input::-ms-clear {
     margin-top: 8px;
 }
 
+.booking-lunch-note {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    background: rgba(255, 237, 213, 0.55);
+    color: #9a4b04;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
 .time-slots-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
@@ -3356,6 +3430,25 @@ input::-ms-clear {
     opacity: 0.4;
     cursor: not-allowed;
     background: var(--bg-input);
+}
+
+.time-slot.blocked-lunch {
+    cursor: not-allowed;
+    border-style: dashed;
+    border-color: #f59e0b;
+    color: #9a4b04;
+    background: rgba(255, 237, 213, 0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: center;
+    justify-content: center;
+}
+
+.time-slot.blocked-lunch small {
+    font-size: 0.66rem;
+    line-height: 1;
+    font-weight: 700;
 }
 
 /* Booking Summary Card */
@@ -5648,6 +5741,37 @@ select.premium-select-source {
 :root[data-theme='dark'] .cal-phone-line {
     border-color: #2a3b58;
     background: #111d34;
+}
+
+:root[data-theme='dark'] .cal-cell.lunch-blocked {
+    background: repeating-linear-gradient(-45deg, rgba(217, 119, 6, 0.24), rgba(217, 119, 6, 0.24) 8px, rgba(245, 158, 11, 0.14) 8px, rgba(245, 158, 11, 0.14) 16px);
+}
+
+:root[data-theme='dark'] .cal-lunch-label,
+:root[data-theme='dark'] .cal-day-lunch,
+:root[data-theme='dark'] .cal-phone-lunch {
+    color: #fbbf24;
+}
+
+:root[data-theme='dark'] .cal-lunch-label {
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(17, 29, 52, 0.8);
+}
+
+:root[data-theme='dark'] .cal-phone-line.blocked {
+    border-color: #f59e0b;
+    background: repeating-linear-gradient(-45deg, rgba(217, 119, 6, 0.32), rgba(217, 119, 6, 0.32) 8px, rgba(245, 158, 11, 0.18) 8px, rgba(245, 158, 11, 0.18) 16px);
+}
+
+:root[data-theme='dark'] .cal-phone-line.blocked span {
+    color: #fbbf24;
+}
+
+:root[data-theme='dark'] .booking-lunch-note,
+:root[data-theme='dark'] .time-slot.blocked-lunch {
+    border-color: rgba(245, 158, 11, 0.45);
+    background: rgba(146, 64, 14, 0.36);
+    color: #fde68a;
 }
 
 :root[data-theme='dark'] .cal-phone-empty {

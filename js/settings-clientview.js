@@ -62,15 +62,9 @@ App.settings = {
     renderSchedule() {
         const container = document.getElementById('schedule-inputs');
         if (!container) return;
-        const schedule = App.store.get(App.currentUser.id + '_schedule') || [
-            {day:'Lunes',open:true,start:'09:00',end:'18:00'},
-            {day:'Martes',open:true,start:'09:00',end:'18:00'},
-            {day:'Miércoles',open:true,start:'09:00',end:'18:00'},
-            {day:'Jueves',open:true,start:'09:00',end:'18:00'},
-            {day:'Viernes',open:true,start:'09:00',end:'18:00'},
-            {day:'Sábado',open:true,start:'09:00',end:'14:00'},
-            {day:'Domingo',open:false,start:'',end:''}
-        ];
+        const schedule = App.store.get(App.currentUser.id + '_schedule') || this._defaultSchedule();
+        const lunch = this._normalizeLunchConfig(App.store.get(App.currentUser.id + '_lunch_break'));
+        const lunchEnd = this._addMinutes(lunch.start, 60);
         container.innerHTML = schedule.map((s, i) => `
             <div class="schedule-row animate-fade-up" style="animation-delay:${i * 0.05}s">
                 <label class="day-label">${s.day}</label>
@@ -82,7 +76,62 @@ App.settings = {
                     <label class="toggle-slider" for="sched-open-${i}"></label>
                 </div>
             </div>
-        `).join('');
+        `).join('') + `
+            <div class="schedule-row animate-fade-up" style="animation-delay:0.4s">
+                <label class="day-label">Almuerzo (1h)</label>
+                <select id="sched-lunch-start" class="schedule-time-select" ${!lunch.enabled ? 'disabled' : ''} onchange="App.settings.syncLunchEnd()">${App.buildTimeOptions(lunch.start || '13:00')}</select>
+                <span class="schedule-separator">-</span>
+                <select id="sched-lunch-end" class="schedule-time-select" disabled>${App.buildTimeOptions(lunchEnd)}</select>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="sched-lunch-enabled" ${lunch.enabled ? 'checked' : ''} onchange="document.getElementById('sched-lunch-start').disabled=!this.checked;App.settings.syncLunchEnd()">
+                    <label class="toggle-slider" for="sched-lunch-enabled"></label>
+                </div>
+            </div>
+            <small style="display:block;margin-top:8px;color:var(--text-muted)">Si está activo, se bloquea automáticamente 1 hora diaria para almuerzo.</small>
+        `;
+        this.syncLunchEnd();
+    },
+
+    _defaultSchedule() {
+        return [
+            { day: 'Lunes', open: true, start: '09:00', end: '18:00' },
+            { day: 'Martes', open: true, start: '09:00', end: '18:00' },
+            { day: 'Miércoles', open: true, start: '09:00', end: '18:00' },
+            { day: 'Jueves', open: true, start: '09:00', end: '18:00' },
+            { day: 'Viernes', open: true, start: '09:00', end: '18:00' },
+            { day: 'Sábado', open: true, start: '09:00', end: '14:00' },
+            { day: 'Domingo', open: false, start: '', end: '' }
+        ];
+    },
+
+    _normalizeLunchConfig(raw) {
+        const fallbackStart = '13:00';
+        const start = /^([01]\d|2[0-3]):([0-5]\d)$/.test(String(raw && raw.start ? raw.start : ''))
+            ? String(raw.start)
+            : fallbackStart;
+        return {
+            enabled: !!(raw && raw.enabled),
+            start,
+            duration: 60
+        };
+    },
+
+    _addMinutes(time, mins) {
+        const parts = String(time || '00:00').split(':').map(Number);
+        const start = ((parts[0] || 0) * 60) + (parts[1] || 0);
+        const total = (start + Number(mins || 0) + (24 * 60)) % (24 * 60);
+        const h = Math.floor(total / 60);
+        const m = total % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    },
+
+    syncLunchEnd() {
+        const startInput = document.getElementById('sched-lunch-start');
+        const endInput = document.getElementById('sched-lunch-end');
+        if (!startInput || !endInput) return;
+        const end = this._addMinutes(startInput.value || '13:00', 60);
+        endInput.innerHTML = App.buildTimeOptions(end);
+        endInput.value = end;
     },
 
     async save(e) {
@@ -268,14 +317,25 @@ App.settings = {
     saveSchedule(e) {
         e.preventDefault();
         if (!App.currentUser || App.currentUser.role === 'client') return false;
-        const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+        const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
         const schedule = days.map((d, i) => ({
             day: d,
             open: document.getElementById('sched-open-' + i).checked,
             start: document.getElementById('sched-start-' + i).value,
             end: document.getElementById('sched-end-' + i).value
         }));
+        const invalid = schedule.find(s => s.open && (!s.start || !s.end || s.start >= s.end));
+        if (invalid) {
+            App.toast.show(`Revisa el horario de ${invalid.day}: la hora final debe ser mayor que la inicial.`, 'error');
+            return false;
+        }
+
+        const lunch = this._normalizeLunchConfig({
+            enabled: !!(document.getElementById('sched-lunch-enabled') && document.getElementById('sched-lunch-enabled').checked),
+            start: document.getElementById('sched-lunch-start') ? document.getElementById('sched-lunch-start').value : '13:00'
+        });
         App.store.set(App.currentUser.id + '_schedule', schedule);
+        App.store.set(App.currentUser.id + '_lunch_break', lunch);
         App.toast.show('Horario guardado', 'success');
         return false;
     },
@@ -297,7 +357,7 @@ App.settings = {
                     if (isBusiness) {
                         const employees = App.store.getList(userId + '_employees');
                         const suffixes = ['appointments', 'clients', 'services', 'employees', 'schedule',
-                                        'daily_capacity', 'client_daily_limit'];
+                                        'daily_capacity', 'client_daily_limit', 'lunch_break'];
                         suffixes.forEach(s => App.store.remove(userId + '_' + s));
 
                         employees.forEach(emp => App.store.remove('ap_' + userId + '_emp_avail_' + emp.id));
@@ -618,6 +678,10 @@ App.clientView = {
         // Time slots
         html += '<div class="time-slots-section">';
         html += '<h4 style="margin:16px 0 8px">Horarios disponibles</h4>';
+        const lunchInfo = this._getClientLunchInfo(bd.date || null);
+        if (lunchInfo) {
+            html += `<p class="booking-lunch-note"><i class="fas fa-utensils"></i> ${lunchInfo.message}</p>`;
+        }
         html += '<div id="client-time-slots">';
         if (bd.date) {
             html += this._getTimeSlotsHtml();
@@ -659,12 +723,25 @@ App.clientView = {
         const slots = App.appointments && typeof App.appointments._getAvailableSlots === 'function'
             ? App.appointments._getAvailableSlots(bd.date, bd.empId, duration, null, bd.bizId)
             : [];
+        const lunchBlockedSlots = this._getLunchBlockedSlots(bd.date, bd.empId, bd.bizId, duration);
 
-        if (!slots.length) return '<p class="empty-text">No hay horarios disponibles para este día</p>';
+        if (!slots.length && !lunchBlockedSlots.length) return '<p class="empty-text">No hay horarios disponibles para este día</p>';
 
-        return '<div class="time-slots-grid">' + slots.map(slot => {
+        const mixed = [];
+        slots.forEach(slot => mixed.push({ time: slot, type: 'available' }));
+        lunchBlockedSlots
+            .filter(slot => !slots.includes(slot))
+            .forEach(slot => mixed.push({ time: slot, type: 'lunch' }));
+        mixed.sort((a, b) => this._toMinutes(a.time) - this._toMinutes(b.time));
+
+        return '<div class="time-slots-grid">' + mixed.map(item => {
+            const slot = item.time;
+            const isLunch = item.type === 'lunch';
             const selected = bd.time === slot;
             const display = App.formatTime(slot);
+            if (isLunch) {
+                return `<div class="time-slot blocked-lunch"><span>${display}</span><small>Almuerzo</small></div>`;
+            }
             return `<div class="time-slot ${selected ? 'selected' : ''}" onclick="App.clientView._selectTime('${slot}')">${display}</div>`;
         }).join('') + '</div>';
     },
@@ -672,6 +749,69 @@ App.clientView = {
     _selectTime(time) {
         App.clientBookingData.time = time;
         this._renderBookingStep(document.getElementById('client-booking-content'));
+    },
+
+    _getClientLunchInfo(dateStr) {
+        const bd = App.clientBookingData || {};
+        const bizId = bd.bizId;
+        if (!bizId) return null;
+        const raw = App.store.get(bizId + '_lunch_break');
+        if (!raw || !raw.enabled) return null;
+        const [h, m] = String(raw.start || '').split(':').map(Number);
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+        const startMin = (h * 60) + m;
+        const endMin = startMin + 60;
+        let start = startMin;
+        let end = endMin;
+
+        if (dateStr && App.appointments && typeof App.appointments._getScheduleWindow === 'function') {
+            const window = App.appointments._getScheduleWindow(dateStr, bd.empId, bizId);
+            if (!window) return null;
+            start = Math.max(startMin, window.start);
+            end = Math.min(endMin, window.end);
+            if (end <= start) return null;
+        }
+
+        return {
+            start,
+            end,
+            message: `Horario bloqueado por almuerzo del equipo: ${App.formatTime(this._minutesToTime(start))} - ${App.formatTime(this._minutesToTime(end))}.`
+        };
+    },
+
+    _getLunchBlockedSlots(dateStr, employeeId, bizId, duration) {
+        if (!dateStr || !employeeId || !bizId) return [];
+        const lunch = this._getClientLunchInfo(dateStr);
+        if (!lunch) return [];
+        if (!App.appointments || typeof App.appointments._getScheduleWindow !== 'function') return [];
+        const window = App.appointments._getScheduleWindow(dateStr, employeeId, bizId);
+        if (!window) return [];
+
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const step = 30;
+        const out = [];
+
+        for (let min = window.start; min + duration <= window.end; min += step) {
+            if (dateStr === todayStr && min <= nowMinutes) continue;
+            const overlapsLunch = min < lunch.end && lunch.start < (min + duration);
+            if (!overlapsLunch) continue;
+            out.push(this._minutesToTime(min));
+        }
+        return out;
+    },
+
+    _toMinutes(time) {
+        const [h, m] = String(time || '00:00').split(':').map(Number);
+        return (h || 0) * 60 + (m || 0);
+    },
+
+    _minutesToTime(total) {
+        const value = Math.max(0, Number(total) || 0);
+        const h = Math.floor(value / 60) % 24;
+        const m = value % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     },
 
     _renderConfirmation() {
