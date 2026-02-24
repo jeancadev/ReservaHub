@@ -954,7 +954,7 @@ App.clientView = {
 
         const duration = Number(bd.serviceDuration) || 30;
         const slots = App.appointments && typeof App.appointments._getAvailableSlots === 'function'
-            ? App.appointments._getAvailableSlots(bd.date, bd.empId, duration, null, bd.bizId)
+            ? App.appointments._getAvailableSlots(bd.date, bd.empId, duration, null, bd.bizId, { useTeamCapacity: true })
             : [];
         const lunchBlockedSlots = this._getLunchBlockedSlots(bd.date, bd.empId, bd.bizId, duration);
 
@@ -1110,13 +1110,25 @@ App.clientView = {
         }
         const duration = Number(bd.serviceDuration) || 30;
         const slots = App.appointments && typeof App.appointments._getAvailableSlots === 'function'
-            ? App.appointments._getAvailableSlots(bd.date, bd.empId, duration, null, bd.bizId)
+            ? App.appointments._getAvailableSlots(bd.date, bd.empId, duration, null, bd.bizId, { useTeamCapacity: true })
             : [];
         if (!slots.includes(bd.time)) {
             App.toast.show('La disponibilidad cambió. Selecciona otra hora.', 'warning');
             App.clientBookingStep = 4;
             this._renderBookingStep(document.getElementById('client-booking-content'));
             return;
+        }
+        const assignment = App.appointments && typeof App.appointments.resolveBookingEmployee === 'function'
+            ? App.appointments.resolveBookingEmployee(bd.date, bd.time, duration, bd.bizId, bd.empId, null)
+            : { id: bd.empId, name: bd.empName };
+        if (!assignment || !assignment.id) {
+            App.toast.show('Ya no hay profesionales disponibles en esa hora. Elige otro horario.', 'warning');
+            App.clientBookingStep = 4;
+            this._renderBookingStep(document.getElementById('client-booking-content'));
+            return;
+        }
+        if (bd.empId && assignment.id !== bd.empId) {
+            App.toast.show(`Te asignamos con ${assignment.name} para esa hora.`, 'info');
         }
 
         // Auto-register client in the business's client list
@@ -1143,8 +1155,8 @@ App.clientView = {
             clientEmail: u.email,
             serviceId: bd.serviceId,
             serviceName: bd.serviceName,
-            employeeId: bd.empId,
-            employeeName: bd.empName,
+            employeeId: assignment.id,
+            employeeName: assignment.name,
             date: bd.date,
             time: bd.time,
             duration: Number(bd.serviceDuration) || 30,

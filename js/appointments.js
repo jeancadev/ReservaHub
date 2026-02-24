@@ -199,14 +199,21 @@ App.appointments = {
         }
 
         const daily = this.getDailyAvailability(date, ignoreId || null);
-        const slots = this._getAvailableSlots(date, employeeId, duration, ignoreId || null);
+        const slots = this._getAvailableSlots(
+            date,
+            employeeId,
+            duration,
+            ignoreId || null,
+            null,
+            { useTeamCapacity: true }
+        );
 
         if (!slots.length) {
             select.innerHTML = '<option value="">Sin disponibilidad</option>';
             if (hint) {
                 hint.textContent = daily.isFull
                     ? `Cupo diario completo (${daily.booked}/${daily.limit}).`
-                    : 'No hay horarios disponibles en esa fecha para el profesional seleccionado.';
+                    : 'No hay horarios disponibles en esa fecha para el equipo.';
             }
             return;
         }
@@ -218,7 +225,7 @@ App.appointments = {
         }
 
         if (hint) {
-            hint.textContent = `Disponibles ${slots.length} horarios. Cupo diario: ${daily.booked}/${daily.limit}.`;
+            hint.textContent = `Disponibles ${slots.length} horarios para el equipo. Cupo diario: ${daily.booked}/${daily.limit}.`;
         }
     },
 
@@ -284,11 +291,27 @@ App.appointments = {
             this.updateTimeSlots(editId || null);
             return false;
         }
-        const slots = this._getAvailableSlots(date, employeeId, duration, editId || null);
+        const slots = this._getAvailableSlots(
+            date,
+            employeeId,
+            duration,
+            editId || null,
+            null,
+            { useTeamCapacity: true }
+        );
         if (status !== 'cancelled' && (!time || !slots.includes(time))) {
             App.toast.show('La hora seleccionada no esta disponible o no cumple la anticipacion configurada', 'error');
             this.updateTimeSlots(editId || null);
             return false;
+        }
+        const assignment = this.resolveBookingEmployee(date, time, duration, null, employeeId, editId || null);
+        if (status !== 'cancelled' && (!assignment || !assignment.id)) {
+            App.toast.show('Ya no hay profesionales disponibles en esa hora. Selecciona otro horario.', 'warning');
+            this.updateTimeSlots(editId || null);
+            return false;
+        }
+        if (status !== 'cancelled' && assignment.id !== employee.id) {
+            App.toast.show(`Se asigno la cita con ${assignment.name} por disponibilidad del equipo.`, 'info');
         }
 
         const client = this._upsertClient();
@@ -299,8 +322,8 @@ App.appointments = {
             clientPhone,
             serviceId: service.id,
             serviceName: service.name,
-            employeeId: employee.id,
-            employeeName: employee.name,
+            employeeId: (assignment && assignment.id) || employee.id,
+            employeeName: (assignment && assignment.name) || employee.name,
             date,
             time,
             duration,
@@ -556,23 +579,39 @@ App.appointments = {
         });
     },
 
-    _getAvailableSlots(date, employeeId, duration, ignoreId, bizId) {
-        if (!date || !employeeId) return [];
+    _getAvailableSlots(date, employeeId, duration, ignoreId, bizId, options = {}) {
+        if (!date) return [];
+        const requestedDuration = Math.max(5, Number(duration) || 30);
+        const useTeamCapacity = !!(options && options.useTeamCapacity);
+        if (!useTeamCapacity && !employeeId) return [];
+
         const daily = this.getDailyAvailability(date, ignoreId || null, bizId);
         if (daily.isFull) return [];
 
-        const window = this._getScheduleWindow(date, employeeId, bizId);
+        const window = this._getScheduleWindow(date, useTeamCapacity ? '' : employeeId, bizId);
         if (!window) return [];
         const lunch = this._getLunchWindow(bizId);
 
         const step = 30;
         const slots = [];
 
-        for (let min = window.start; min + duration <= window.end; min += step) {
+        for (let min = window.start; min + requestedDuration <= window.end; min += step) {
             const candidate = this._minutesToTime(min);
             if (!this.isWithinBookingWindow(date, candidate, bizId)) continue;
-            if (lunch && this._rangesOverlap(min, min + duration, lunch.start, lunch.end)) continue;
-            if (!this._hasConflict(date, employeeId, min, min + duration, ignoreId, bizId)) {
+            if (lunch && this._rangesOverlap(min, min + requestedDuration, lunch.start, lunch.end)) continue;
+            if (useTeamCapacity) {
+                const assignable = this.getAssignableEmployeesForSlot(
+                    date,
+                    candidate,
+                    requestedDuration,
+                    bizId,
+                    ignoreId || null,
+                    employeeId || ''
+                );
+                if (assignable.length) slots.push(candidate);
+                continue;
+            }
+            if (!this._hasConflict(date, employeeId, min, min + requestedDuration, ignoreId, bizId)) {
                 slots.push(candidate);
             }
         }
@@ -581,6 +620,7 @@ App.appointments = {
     },
 
     _hasConflict(date, employeeId, startMin, endMin, ignoreId, bizId) {
+        if (!employeeId) return false;
         const services = App.store.getList(this._servicesKey(bizId));
         const map = {};
         services.forEach(s => { map[s.id] = Number(s.duration) || 30; });
@@ -598,6 +638,45 @@ App.appointments = {
             const aEnd = aStart + aDuration;
             return startMin < aEnd && aStart < endMin;
         });
+    },
+
+    getAssignableEmployeesForSlot(date, time, duration, bizId, ignoreId, preferredEmployeeId) {
+        if (!date || !time) return [];
+        const requestedDuration = Math.max(5, Number(duration) || 30);
+        const startMin = this._toMinutes(time);
+        const endMin = startMin + requestedDuration;
+
+        const employees = App.store.getList(this._employeesKey(bizId)).filter(emp => emp && emp.id);
+        const available = employees.filter(emp => {
+            const window = this._getScheduleWindow(date, emp.id, bizId);
+            if (!window) return false;
+            if (startMin < window.start || endMin > window.end) return false;
+            return !this._hasConflict(date, emp.id, startMin, endMin, ignoreId || null, bizId);
+        });
+
+        if (!preferredEmployeeId || available.length <= 1) return available;
+
+        return available.slice().sort((a, b) => {
+            if (a.id === preferredEmployeeId) return -1;
+            if (b.id === preferredEmployeeId) return 1;
+            return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+    },
+
+    resolveBookingEmployee(date, time, duration, bizId, preferredEmployeeId, ignoreId) {
+        const available = this.getAssignableEmployeesForSlot(
+            date,
+            time,
+            duration,
+            bizId,
+            ignoreId || null,
+            preferredEmployeeId || ''
+        );
+        if (!available.length) return null;
+        return {
+            id: available[0].id,
+            name: available[0].name || 'Profesional'
+        };
     },
 
     _getScheduleWindow(date, employeeId, bizId) {
@@ -666,6 +745,12 @@ App.appointments = {
         const targetBizId = this._resolveBusinessId(bizId);
         if (!targetBizId) return App.getBusinessKey('services');
         return App.getBizKey(targetBizId, 'services');
+    },
+
+    _employeesKey(bizId) {
+        const targetBizId = this._resolveBusinessId(bizId);
+        if (!targetBizId) return App.getBusinessKey('employees');
+        return App.getBizKey(targetBizId, 'employees');
     },
 
     _buildClientCriteria(data) {
