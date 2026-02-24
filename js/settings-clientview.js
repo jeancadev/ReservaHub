@@ -54,6 +54,20 @@ App.settings = {
                 : 1;
             clientLimitInput.value = limit;
         }
+        const minHoursInput = document.getElementById('settings-booking-min-hours');
+        if (minHoursInput) {
+            const hours = App.appointments && typeof App.appointments.getBookingMinHours === 'function'
+                ? App.appointments.getBookingMinHours(u.id)
+                : 4;
+            minHoursInput.value = hours;
+        }
+        const maxDaysInput = document.getElementById('settings-booking-max-days');
+        if (maxDaysInput) {
+            const days = App.appointments && typeof App.appointments.getBookingMaxDays === 'function'
+                ? App.appointments.getBookingMaxDays(u.id)
+                : 30;
+            maxDaysInput.value = days;
+        }
         this.updateBusinessPhotoPreview();
         this.renderSchedule();
     },
@@ -227,6 +241,24 @@ App.settings = {
             App.toast.show('El telefono debe usar el formato +506 XXXX-XXXX', 'error');
             return false;
         }
+        const minHoursInput = document.getElementById('settings-booking-min-hours');
+        let bookingMinHours = minHoursInput ? Number(minHoursInput.value) : NaN;
+        if (!Number.isFinite(bookingMinHours) || bookingMinHours < 0) bookingMinHours = 4;
+        bookingMinHours = Math.floor(bookingMinHours);
+
+        const maxDaysInput = document.getElementById('settings-booking-max-days');
+        let bookingMaxDays = maxDaysInput ? Number(maxDaysInput.value) : NaN;
+        if (!Number.isFinite(bookingMaxDays) || bookingMaxDays < 1) bookingMaxDays = 30;
+        bookingMaxDays = Math.floor(bookingMaxDays);
+
+        if (bookingMinHours > (bookingMaxDays * 24)) {
+            App.toast.show('La anticipacion minima no puede ser mayor al rango maximo en dias.', 'error');
+            return false;
+        }
+
+        if (minHoursInput) minHoursInput.value = bookingMinHours;
+        if (maxDaysInput) maxDaysInput.value = bookingMaxDays;
+
         const previousBusinessPhotoPath = String(u.businessPhotoPath || App.store.get(u.id + '_business_profile_photo_path') || '');
         let normalizedBusinessPhoto = typeof App.getBusinessPhotoUrl === 'function'
             ? App.getBusinessPhotoUrl(u)
@@ -305,6 +337,8 @@ App.settings = {
         clientDailyLimit = Math.floor(clientDailyLimit);
         if (clientLimitInput) clientLimitInput.value = clientDailyLimit;
         App.store.set(u.id + '_client_daily_limit', clientDailyLimit);
+        App.store.set(u.id + '_booking_min_hours', bookingMinHours);
+        App.store.set(u.id + '_booking_max_days', bookingMaxDays);
 
         const users = App.store.getList('users');
         const idx = users.findIndex(x => x.id === u.id);
@@ -510,7 +544,8 @@ App.settings = {
                             }
                         }
                         const suffixes = ['appointments', 'clients', 'services', 'employees', 'schedule',
-                                        'daily_capacity', 'client_daily_limit', 'lunch_break', 'business_profile_photo', 'business_profile_photo_path'];
+                                        'daily_capacity', 'client_daily_limit', 'booking_min_hours', 'booking_max_days',
+                                        'lunch_break', 'business_profile_photo', 'business_profile_photo_path'];
                         suffixes.forEach(s => App.store.remove(userId + '_' + s));
 
                         employees.forEach(emp => App.store.remove('ap_' + userId + '_emp_avail_' + emp.id));
@@ -819,7 +854,14 @@ App.clientView = {
         const availKey = bd.bizId + '_emp_avail_' + bd.empId;
         const avail = App.store.get('ap_' + availKey) || null;
 
+        const bookingPolicy = App.appointments && typeof App.appointments.getBookingPolicy === 'function'
+            ? App.appointments.getBookingPolicy(bd.bizId)
+            : null;
+
         let html = '<h3 class="booking-section-title">Selecciona fecha y hora</h3>';
+        if (bookingPolicy) {
+            html += `<p class="booking-lunch-note"><i class="fas fa-hourglass-half"></i> Reservas permitidas con minimo ${bookingPolicy.minHours}h y maximo ${bookingPolicy.maxDays} dias de anticipacion.</p>`;
+        }
         html += '<div class="booking-calendar-wrapper">';
         html += '<div class="calendar-header">';
         html += `<button class="btn btn-sm btn-outline" onclick="App.clientView._prevMonth()"><i class="fas fa-chevron-left"></i></button>`;
@@ -844,8 +886,16 @@ App.clientView = {
                 ? App.appointments.getDailyAvailability(dateStr, null, bd.bizId)
                 : null;
             const isFull = !!(daily && daily.isFull);
-            const disabled = isPast || !empAvailable || isFull;
-            html += `<div class="day-cell ${disabled ? 'disabled' : ''} ${isFull ? 'full' : ''} ${isToday ? 'today' : ''} ${selected ? 'selected' : ''}" title="${isFull && daily ? `Cupo completo (${daily.booked}/${daily.limit})` : ''}" onclick="${disabled ? '' : `App.clientView._selectDate('${dateStr}')`}">${day}</div>`;
+            const bookingStatus = App.appointments && typeof App.appointments.getBookingDateStatus === 'function'
+                ? App.appointments.getBookingDateStatus(dateStr, bd.bizId)
+                : { isTooSoon: false, isTooFar: false, minHours: 0, maxDays: 0 };
+            const disabledByWindow = !!(bookingStatus.isTooSoon || bookingStatus.isTooFar);
+            const disabled = isPast || !empAvailable || isFull || disabledByWindow;
+            let title = '';
+            if (isFull && daily) title = `Cupo completo (${daily.booked}/${daily.limit})`;
+            else if (bookingStatus.isTooSoon) title = `Solo se permiten reservas con ${bookingStatus.minHours} horas de anticipacion`;
+            else if (bookingStatus.isTooFar) title = `Solo se permiten reservas hasta ${bookingStatus.maxDays} dias hacia adelante`;
+            html += `<div class="day-cell ${disabled ? 'disabled' : ''} ${isFull ? 'full' : ''} ${isToday ? 'today' : ''} ${selected ? 'selected' : ''}" title="${title}" onclick="${disabled ? '' : `App.clientView._selectDate('${dateStr}')`}">${day}</div>`;
         }
         html += '</div></div>';
 
@@ -888,6 +938,15 @@ App.clientView = {
     _getTimeSlotsHtml() {
         const bd = App.clientBookingData;
         if (!bd.date) return '<p class="empty-text">Selecciona una fecha</p>';
+        const bookingStatus = App.appointments && typeof App.appointments.getBookingDateStatus === 'function'
+            ? App.appointments.getBookingDateStatus(bd.date, bd.bizId)
+            : null;
+        if (bookingStatus && bookingStatus.isTooSoon) {
+            return `<p class="empty-text">Esta fecha aun no se puede reservar. Debe existir al menos ${bookingStatus.minHours} horas de anticipacion.</p>`;
+        }
+        if (bookingStatus && bookingStatus.isTooFar) {
+            return `<p class="empty-text">Esta fecha supera el maximo permitido de ${bookingStatus.maxDays} dias de anticipacion.</p>`;
+        }
         const daily = App.appointments && typeof App.appointments.getDailyAvailability === 'function'
             ? App.appointments.getDailyAvailability(bd.date, null, bd.bizId)
             : null;
@@ -961,17 +1020,18 @@ App.clientView = {
         const window = App.appointments._getScheduleWindow(dateStr, employeeId, bizId);
         if (!window) return [];
 
-        const now = new Date();
-        const todayStr = now.toISOString().slice(0, 10);
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
         const step = 30;
         const out = [];
 
         for (let min = window.start; min + duration <= window.end; min += step) {
-            if (dateStr === todayStr && min <= nowMinutes) continue;
+            const slot = this._minutesToTime(min);
+            const insideWindow = App.appointments && typeof App.appointments.isWithinBookingWindow === 'function'
+                ? App.appointments.isWithinBookingWindow(dateStr, slot, bizId)
+                : true;
+            if (!insideWindow) continue;
             const overlapsLunch = min < lunch.end && lunch.start < (min + duration);
             if (!overlapsLunch) continue;
-            out.push(this._minutesToTime(min));
+            out.push(slot);
         }
         return out;
     },
@@ -1024,6 +1084,15 @@ App.clientView = {
         const bd = App.clientBookingData;
         const u = App.currentUser;
         const notes = document.getElementById('client-booking-notes') ? document.getElementById('client-booking-notes').value.trim() : '';
+        const insideWindow = App.appointments && typeof App.appointments.isWithinBookingWindow === 'function'
+            ? App.appointments.isWithinBookingWindow(bd.date, bd.time, bd.bizId)
+            : true;
+        if (!insideWindow) {
+            App.toast.show('La cita seleccionada no cumple la ventana de anticipacion permitida.', 'warning');
+            App.clientBookingStep = 4;
+            this._renderBookingStep(document.getElementById('client-booking-content'));
+            return;
+        }
         const clientLimit = App.appointments && typeof App.appointments.getClientDailyAvailability === 'function'
             ? App.appointments.getClientDailyAvailability({
                 bizId: bd.bizId,

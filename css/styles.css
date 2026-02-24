@@ -2483,6 +2483,34 @@ input::-ms-clear {
     overflow: visible;
 }
 
+.settings-subsection {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 14px 2px;
+    margin-bottom: 14px;
+    background: var(--bg-input);
+}
+
+.settings-subsection-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.settings-subsection-title i {
+    color: var(--primary);
+}
+
+.settings-subsection-help {
+    margin: 0 0 10px;
+    font-size: 0.83rem;
+    color: var(--text-muted);
+}
+
 #schedule-inputs .schedule-row {
     position: relative;
     z-index: 1;

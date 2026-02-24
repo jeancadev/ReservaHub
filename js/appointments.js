@@ -187,6 +187,17 @@ App.appointments = {
             return;
         }
 
+        const bookingStatus = this.getBookingDateStatus(date);
+        if (bookingStatus.isTooSoon || bookingStatus.isTooFar) {
+            select.innerHTML = '<option value="">Sin disponibilidad</option>';
+            if (hint) {
+                hint.textContent = bookingStatus.isTooSoon
+                    ? `Reservas disponibles con minimo ${bookingStatus.minHours} horas de anticipacion.`
+                    : `Reservas disponibles hasta ${bookingStatus.maxDays} dias hacia adelante.`;
+            }
+            return;
+        }
+
         const daily = this.getDailyAvailability(date, ignoreId || null);
         const slots = this._getAvailableSlots(date, employeeId, duration, ignoreId || null);
 
@@ -256,6 +267,17 @@ App.appointments = {
         }
 
         const duration = Number(service.duration) || Number(document.getElementById('appt-duration').value) || 30;
+        const bookingDateStatus = this.getBookingDateStatus(date);
+        if (status !== 'cancelled' && (bookingDateStatus.isTooSoon || bookingDateStatus.isTooFar)) {
+            App.toast.show(
+                bookingDateStatus.isTooSoon
+                    ? `Esta fecha requiere minimo ${bookingDateStatus.minHours} horas de anticipacion.`
+                    : `Solo se permiten reservas hasta ${bookingDateStatus.maxDays} dias hacia adelante.`,
+                'error'
+            );
+            this.updateTimeSlots(editId || null);
+            return false;
+        }
         const daily = this.getDailyAvailability(date, editId || null);
         if (status !== 'cancelled' && daily.isFull) {
             App.toast.show(`Sin cupo diario para ${date} (${daily.booked}/${daily.limit})`, 'error');
@@ -264,7 +286,7 @@ App.appointments = {
         }
         const slots = this._getAvailableSlots(date, employeeId, duration, editId || null);
         if (status !== 'cancelled' && (!time || !slots.includes(time))) {
-            App.toast.show('La hora seleccionada ya no esta disponible', 'error');
+            App.toast.show('La hora seleccionada no esta disponible o no cumple la anticipacion configurada', 'error');
             this.updateTimeSlots(editId || null);
             return false;
         }
@@ -425,6 +447,74 @@ App.appointments = {
         };
     },
 
+    getBookingMinHours(bizId) {
+        const targetBizId = this._resolveBusinessId(bizId);
+        const raw = targetBizId ? App.store.get(targetBizId + '_booking_min_hours') : null;
+        const parsed = Number(raw);
+        const hours = Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 4;
+        if (targetBizId && (!Number.isFinite(parsed) || parsed < 0)) {
+            App.store.set(targetBizId + '_booking_min_hours', hours);
+        }
+        return hours;
+    },
+
+    getBookingMaxDays(bizId) {
+        const targetBizId = this._resolveBusinessId(bizId);
+        const raw = targetBizId ? App.store.get(targetBizId + '_booking_max_days') : null;
+        const parsed = Number(raw);
+        const days = Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 30;
+        if (targetBizId && (!Number.isFinite(parsed) || parsed < 1)) {
+            App.store.set(targetBizId + '_booking_max_days', days);
+        }
+        return days;
+    },
+
+    getBookingPolicy(bizId) {
+        const minHours = this.getBookingMinHours(bizId);
+        const maxDays = this.getBookingMaxDays(bizId);
+        const now = new Date();
+        const earliest = new Date(now.getTime() + (minHours * 60 * 60 * 1000));
+        const latest = new Date(now);
+        latest.setHours(23, 59, 59, 999);
+        latest.setDate(latest.getDate() + maxDays);
+        return { minHours, maxDays, earliest, latest };
+    },
+
+    getBookingDateStatus(date, bizId) {
+        const policy = this.getBookingPolicy(bizId);
+        const dayStart = this._parseDateTimeLocal(date, '00:00');
+        const dayEnd = this._parseDateTimeLocal(date, '23:59');
+        if (!dayStart || !dayEnd) {
+            return {
+                allowed: false,
+                isTooSoon: false,
+                isTooFar: false,
+                minHours: policy.minHours,
+                maxDays: policy.maxDays,
+                earliestDate: this._toLocalDateIso(policy.earliest),
+                latestDate: this._toLocalDateIso(policy.latest)
+            };
+        }
+        const isTooSoon = dayEnd < policy.earliest;
+        const isTooFar = dayStart > policy.latest;
+        return {
+            allowed: !isTooSoon && !isTooFar,
+            isTooSoon,
+            isTooFar,
+            minHours: policy.minHours,
+            maxDays: policy.maxDays,
+            earliestDate: this._toLocalDateIso(policy.earliest),
+            latestDate: this._toLocalDateIso(policy.latest)
+        };
+    },
+
+    isWithinBookingWindow(date, time, bizId) {
+        const policy = this.getBookingPolicy(bizId);
+        const slotDateTime = this._parseDateTimeLocal(date, time);
+        if (!slotDateTime) return false;
+        return slotDateTime >= policy.earliest && slotDateTime <= policy.latest;
+    },
+
     _markClientVisit(clientId, date) {
         const key = App.getBusinessKey('clients');
         const client = App.store.getList(key).find(c => c.id === clientId);
@@ -475,16 +565,13 @@ App.appointments = {
         if (!window) return [];
         const lunch = this._getLunchWindow(bizId);
 
-        const now = new Date();
-        const todayStr = now.toISOString().slice(0, 10);
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
         const step = 30;
         const slots = [];
 
         for (let min = window.start; min + duration <= window.end; min += step) {
-            if (date === todayStr && min <= nowMinutes) continue;
-            if (lunch && this._rangesOverlap(min, min + duration, lunch.start, lunch.end)) continue;
             const candidate = this._minutesToTime(min);
+            if (!this.isWithinBookingWindow(date, candidate, bizId)) continue;
+            if (lunch && this._rangesOverlap(min, min + duration, lunch.start, lunch.end)) continue;
             if (!this._hasConflict(date, employeeId, min, min + duration, ignoreId, bizId)) {
                 slots.push(candidate);
             }
@@ -618,27 +705,54 @@ App.appointments = {
     },
 
     _suggestDate(employeeId) {
-        const now = new Date();
-        const today = new Date(now);
+        const policy = this.getBookingPolicy();
+        const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const maxDays = Math.max(0, Number(policy.maxDays) || 0);
 
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i <= maxDays; i++) {
             const d = new Date(today);
             d.setDate(today.getDate() + i);
-            const dateStr = d.toISOString().slice(0, 10);
+            const dateStr = this._toLocalDateIso(d);
+            const status = this.getBookingDateStatus(dateStr);
+            if (status.isTooSoon || status.isTooFar) continue;
             const window = this._getScheduleWindow(dateStr, employeeId || '');
             if (!window) continue;
-            if (i === 0 && window.end <= nowMinutes) continue;
-            return dateStr;
+            const lunch = this._getLunchWindow();
+            if (employeeId) {
+                if (this._getAvailableSlots(dateStr, employeeId, 30, null).length) return dateStr;
+                continue;
+            }
+            for (let min = window.start; min + 30 <= window.end; min += 30) {
+                const candidate = this._minutesToTime(min);
+                if (lunch && this._rangesOverlap(min, min + 30, lunch.start, lunch.end)) continue;
+                if (this.isWithinBookingWindow(dateStr, candidate)) return dateStr;
+            }
         }
-        return today.toISOString().slice(0, 10);
+        return this._toLocalDateIso(today);
     },
 
     _dayIndex(date) {
         const d = new Date(date + 'T00:00:00');
         const jsDay = d.getDay();
         return jsDay === 0 ? 6 : jsDay - 1;
+    },
+
+    _parseDateTimeLocal(date, time) {
+        const [year, month, day] = String(date || '').split('-').map(Number);
+        const [hour, minute] = String(time || '00:00').split(':').map(Number);
+        if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+        if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+        return new Date(year, month - 1, day, hour, minute, 0, 0);
+    },
+
+    _toLocalDateIso(date) {
+        const value = date instanceof Date ? date : new Date(date);
+        if (!(value instanceof Date) || Number.isNaN(value.getTime())) return '';
+        const y = value.getFullYear();
+        const m = String(value.getMonth() + 1).padStart(2, '0');
+        const d = String(value.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     },
 
     _toMinutes(time) {
