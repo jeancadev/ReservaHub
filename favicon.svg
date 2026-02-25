@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <clipPath id="clip">
+      <rect width="512" height="512" rx="90" ry="90"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background: white rounded square -->
+  <rect width="512" height="512" rx="90" ry="90" fill="#ffffff"/>
+
+  <!-- Clock ring - thick dark navy circle -->
+  <circle cx="256" cy="256" r="195" fill="none" stroke="#1b2038" stroke-width="24"/>
+
+  <!-- Only 4 tick marks: 12, 3, 6, 9 -->
+  <g stroke="#1b2038" stroke-width="18" stroke-linecap="round">
+    <line x1="256" y1="80" x2="256" y2="116"/>   <!-- 12 -->
+    <line x1="432" y1="256" x2="396" y2="256"/>   <!-- 3 -->
+    <line x1="256" y1="432" x2="256" y2="396"/>   <!-- 6 -->
+    <line x1="80" y1="256" x2="116" y2="256"/>    <!-- 9 -->
+  </g>
+
+  <!-- ===== SCISSORS AS CLOCK HANDS ===== -->
+  <!-- Left blade (pointing to ~10 o'clock), with finger hole at bottom-right -->
+  <g fill="none" stroke="#1b2038" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left scissor blade: tip upper-left, hole lower-right -->
+    <line x1="256" y1="256" x2="158" y2="128" stroke-width="16"/>
+    <!-- Finger hole (bottom-right of center) -->
+    <circle cx="296" cy="320" r="20" fill="none" stroke-width="12"/>
+    <!-- Connection from center to hole -->
+    <line x1="256" y1="256" x2="280" y2="304" stroke-width="12"/>
+  </g>
+
+  <g fill="none" stroke="#1b2038" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Right scissor blade: tip upper-right, hole lower-left -->
+    <line x1="256" y1="256" x2="362" y2="122" stroke-width="16"/>
+    <!-- Finger hole (bottom-left of center) -->
+    <circle cx="216" cy="320" r="20" fill="none" stroke-width="12"/>
+    <!-- Connection from center to hole -->
+    <line x1="256" y1="256" x2="232" y2="304" stroke-width="12"/>
+  </g>
+
+  <!-- Center pivot dot -->
+  <circle cx="256" cy="256" r="8" fill="#1b2038"/>
+</svg>
