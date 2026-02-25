@@ -335,12 +335,19 @@ App.appointments = {
 
         if (editId) {
             const prev = App.store.getList(App.getBusinessKey('appointments')).find(a => a.id === editId);
-            App.store.updateInList(App.getBusinessKey('appointments'), editId, payload);
+            const updated = App.store.updateInList(App.getBusinessKey('appointments'), editId, payload)
+                || Object.assign({}, prev || {}, payload, { id: editId });
             if (prev && prev.status !== 'completed' && payload.status === 'completed') this._markClientVisit(client.id, payload.date);
+            if ((!prev || prev.status !== 'confirmed') && payload.status === 'confirmed') {
+                this._notifyAppointmentConfirmed(updated);
+            }
             App.toast.show('Cita actualizada', 'success');
         } else {
-            App.store.addToList(App.getBusinessKey('appointments'), payload);
+            const created = App.store.addToList(App.getBusinessKey('appointments'), payload);
             if (payload.status === 'completed') this._markClientVisit(client.id, payload.date);
+            if (payload.status === 'confirmed') {
+                this._notifyAppointmentConfirmed(created);
+            }
             App.toast.show('Cita creada', 'success');
         }
 
@@ -376,11 +383,24 @@ App.appointments = {
         App.ui.initRipple();
     },
 
-    confirm(id) {
-        App.store.updateInList(App.getBusinessKey('appointments'), id, { status: 'confirmed' });
+    async confirm(id) {
+        const key = App.getBusinessKey('appointments');
+        const prev = App.store.getList(key).find(a => a.id === id);
+        if (!prev) {
+            App.toast.show('No se encontro la cita', 'error');
+            return;
+        }
+
+        const updated = App.store.updateInList(key, id, { status: 'confirmed' })
+            || Object.assign({}, prev, { status: 'confirmed' });
+
         App.toast.show('Cita confirmada', 'success');
         App.modal.close();
         this._refreshViews();
+
+        if (prev.status !== 'confirmed') {
+            await this._notifyAppointmentConfirmed(updated);
+        }
     },
 
     complete(id) {
@@ -410,6 +430,85 @@ App.appointments = {
             cancelled: 'Cancelada'
         };
         return labels[status] || status;
+    },
+
+    async _notifyAppointmentConfirmed(appt) {
+        if (!appt || !appt.id || appt.status !== 'confirmed') {
+            return { sent: false, reason: 'invalid-appointment' };
+        }
+        if (appt.confirmationEmailSentAt) {
+            return { sent: false, reason: 'already-sent' };
+        }
+        if (!App.notifications || typeof App.notifications.sendAppointmentConfirmation !== 'function') {
+            console.warn('Notifications module is not available.');
+            return { sent: false, reason: 'module-missing' };
+        }
+
+        const result = await App.notifications.sendAppointmentConfirmation({
+            appointment: appt,
+            business: App.currentUser
+        });
+
+        const key = App.getBusinessKey('appointments');
+        const reason = result && result.reason ? String(result.reason) : '';
+        const errorMessage = result && result.error ? String(result.error) : '';
+        const shortError = errorMessage ? errorMessage.slice(0, 220) : '';
+
+        if (result && result.sent) {
+            App.store.updateInList(key, appt.id, {
+                confirmationEmailSentAt: result.sentAt || new Date().toISOString(),
+                confirmationEmailStatus: 'sent',
+                confirmationEmailError: ''
+            });
+            App.toast.show('Correo de confirmacion enviado al cliente.', 'success');
+            return result;
+        }
+
+        if (reason === 'missing-client-email' || reason === 'invalid-client-email' || reason === 'invalid-recipient') {
+            App.store.updateInList(key, appt.id, {
+                confirmationEmailStatus: 'skipped',
+                confirmationEmailError: reason
+            });
+            App.toast.show('La cita se confirmo, pero el cliente no tiene un correo valido.', 'warning');
+            return result;
+        }
+
+        if (reason && reason !== 'already-sent') {
+            App.store.updateInList(key, appt.id, {
+                confirmationEmailStatus: 'error',
+                confirmationEmailError: errorMessage || reason
+            });
+        }
+
+        if (reason === 'backend-unavailable' || reason === 'function-missing') {
+            App.toast.show('Cita confirmada. Configura la funcion de correo para activar el envio automatico.', 'warning');
+            return result;
+        }
+
+        if (reason === 'missing-config') {
+            App.toast.show('Cita confirmada. Faltan variables de entorno en la funcion (RESEND_API_KEY o NOTIFY_FROM_EMAIL).', 'warning');
+            return result;
+        }
+
+        if (reason === 'unauthorized' || reason === 'forbidden') {
+            App.toast.show('Cita confirmada. La funcion rechazo el envio por permisos/sesion. Vuelve a iniciar sesion y prueba de nuevo.', 'warning');
+            return result;
+        }
+
+        if (reason === 'provider-error') {
+            App.toast.show(`Cita confirmada, pero Resend rechazo el correo: ${shortError || 'Revisa remitente y dominio verificado.'}`, 'warning');
+            return result;
+        }
+
+        if (reason === 'send-failed') {
+            App.toast.show(`Cita confirmada, pero ocurrio un error al enviar: ${shortError || 'Revisa logs de la funcion.'}`, 'warning');
+            return result;
+        }
+
+        if (reason && reason !== 'already-sent') {
+            App.toast.show('Cita confirmada, pero el correo no se pudo enviar.', 'warning');
+        }
+        return result;
     },
 
     getDailyLimit(bizId) {
