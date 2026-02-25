@@ -1149,10 +1149,11 @@ App.clientView = {
         App.store.updateInList(clientsKey, client.id, { visits: (client.visits || 0) + 1, lastVisit: bd.date });
 
         // Create the appointment
-        App.store.addToList(bd.bizId + '_appointments', {
+        const appointmentObj = {
             clientId: client.id,
             clientName: u.name,
             clientEmail: u.email,
+            clientPhone: u.phone || '',
             serviceId: bd.serviceId,
             serviceName: bd.serviceName,
             employeeId: assignment.id,
@@ -1164,7 +1165,16 @@ App.clientView = {
             status: 'pending',
             notes: notes,
             source: 'client-app'
-        });
+        };
+        const savedAppt = App.store.addToList(bd.bizId + '_appointments', appointmentObj);
+
+        // Notify the business
+        if (App.notifications && typeof App.notifications.sendAppointmentNotification === 'function') {
+            App.notifications.sendAppointmentNotification({
+                appointment: savedAppt || appointmentObj,
+                business: biz
+            }).catch(console.error); // Async fire-and-forget
+        }
 
         App.toast.show('¡Reserva confirmada! El negocio será notificado.', 'success');
 

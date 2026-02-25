@@ -196,5 +196,82 @@ App.notifications = {
             if (details.status === 502) return { sent: false, reason: 'provider-error', error: message };
             return { sent: false, reason: details.reason || 'send-failed', error: message };
         }
+    },
+
+    async sendAppointmentNotification({ appointment, business } = {}) {
+        if (!appointment || !appointment.id) {
+            return { sent: false, reason: 'missing-appointment' };
+        }
+
+        const backendReady = App.backend
+            && App.backend.client
+            && App.backend.enabled
+            && typeof App.backend.isCloudReady === 'function'
+            && App.backend.isCloudReady()
+            && App.backend.client.functions
+            && typeof App.backend.client.functions.invoke === 'function';
+
+        if (!backendReady) {
+            return { sent: false, reason: 'backend-unavailable' };
+        }
+
+        let employeeEmail = '';
+        if (appointment.employeeId) {
+            const owner = this._resolveBusinessProfile(business);
+            if (owner && owner.id) {
+                const employees = App.store.getList(owner.id + '_employees');
+                const emp = employees.find(e => e.id === appointment.employeeId);
+                if (emp && emp.email) employeeEmail = emp.email;
+            }
+        }
+
+        const u = App.currentUser || {};
+        const clientEmail = this._resolveClientEmail(appointment) || u.email || '';
+        const clientName = appointment.clientName || u.name || 'Cliente';
+        const clientPhone = u.role === 'client' ? u.phone : (appointment.clientPhone || '');
+
+        const payload = this._buildPayload({ appointment, business, clientEmail });
+        // Add specific notification properties to the payload
+        payload.client = {
+            email: clientEmail,
+            name: clientName,
+            phone: clientPhone
+        };
+        payload.employee = {
+            email: employeeEmail
+        };
+
+        const invokeOptions = { body: payload };
+
+        try {
+            const sessionResult = await App.backend.client.auth.getSession();
+            const session = sessionResult && sessionResult.data ? sessionResult.data.session : null;
+            const token = session && session.access_token ? String(session.access_token) : '';
+            if (token) {
+                invokeOptions.headers = { Authorization: `Bearer ${token}` };
+            }
+        } catch {
+            // Continue and let Supabase SDK handle auth headers if available.
+        }
+
+        try {
+            const { data, error } = await App.backend.client.functions.invoke('appointment-notification-email', {
+                ...invokeOptions
+            });
+
+            if (error) {
+                const details = await this._extractFunctionInvokeError(error);
+                return { sent: false, error: details.error || error.message };
+            }
+
+            if (data && data.sent === false) {
+                return { sent: false, error: data.error };
+            }
+
+            return { sent: true };
+        } catch (err) {
+             console.error("Function invocation error:", err);
+             return { sent: false, error: err.message || err };
+        }
     }
 };
