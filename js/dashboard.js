@@ -43,6 +43,11 @@ App.dashboard = {
 
         // Quick summary
         this.renderQuickSummary(upcomingAppts);
+
+        // In-app notifications bell
+        if (App.inAppNotifications && typeof App.inAppNotifications.renderBell === 'function') {
+            App.inAppNotifications.renderBell();
+        }
     },
 
     animateValue(id, val) {

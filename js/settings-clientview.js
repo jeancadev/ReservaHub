@@ -552,11 +552,43 @@ App.settings = {
                     } else {
                         const users = App.store.getList('users');
                         const businesses = users.filter(x => x.role === 'business');
+                        const clientEmail = String(u.email || '').toLowerCase();
                         businesses.forEach(biz => {
+                            // --- Cancel active appointments & notify business ---
+                            const apptsKey = biz.id + '_appointments';
+                            const appts = App.store.getList(apptsKey);
+                            const clientAppts = appts.filter(a =>
+                                String(a.clientEmail || '').toLowerCase() === clientEmail
+                            );
+                            const activeAppts = clientAppts.filter(a =>
+                                a.status === 'pending' || a.status === 'confirmed'
+                            );
+                            if (clientAppts.length > 0) {
+                                // Remove all client appointments (history + active)
+                                const remaining = appts.filter(a =>
+                                    String(a.clientEmail || '').toLowerCase() !== clientEmail
+                                );
+                                App.store.set(apptsKey, remaining);
+                            }
+                            // Create in-app notification for each cancelled active appointment
+                            if (activeAppts.length > 0 && App.inAppNotifications) {
+                                activeAppts.forEach(appt => {
+                                    App.inAppNotifications.add(biz.id, {
+                                        type: 'client_deleted_account',
+                                        clientName: u.name || '',
+                                        clientEmail: u.email || '',
+                                        appointmentDate: appt.date || '',
+                                        appointmentTime: appt.time || '',
+                                        serviceName: appt.serviceName || '',
+                                        employeeName: appt.employeeName || ''
+                                    });
+                                });
+                            }
+                            // --- Remove client from clients list ---
                             const clientsKey = biz.id + '_clients';
                             const clients = App.store.getList(clientsKey);
                             const updated = clients.filter(c =>
-                                String(c.email || '').toLowerCase() !== String(u.email || '').toLowerCase()
+                                String(c.email || '').toLowerCase() !== clientEmail
                             );
                             if (updated.length !== clients.length) {
                                 App.store.set(clientsKey, updated);

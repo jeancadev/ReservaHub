@@ -573,6 +573,166 @@ const App = {
     uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 };
 
+// ---- IN-APP NOTIFICATIONS ----
+App.inAppNotifications = {
+    _panelOpen: false,
+
+    _key(bizId) {
+        return (bizId || (App.currentUser && App.currentUser.id) || '') + '_in_app_notifications';
+    },
+
+    getAll(bizId) {
+        return App.store.getList(this._key(bizId));
+    },
+
+    getUnreadCount(bizId) {
+        return this.getAll(bizId).filter(n => !n.read).length;
+    },
+
+    add(bizId, data) {
+        const notification = Object.assign({
+            id: App.uid(),
+            read: false,
+            createdAt: new Date().toISOString()
+        }, data);
+        App.store.addToList(this._key(bizId), notification);
+        return notification;
+    },
+
+    markAllRead(bizId) {
+        const all = this.getAll(bizId);
+        if (!all.length) return;
+        all.forEach(n => { n.read = true; });
+        App.store.set(this._key(bizId), all);
+        this.renderBell();
+    },
+
+    clear(bizId) {
+        App.store.remove(this._key(bizId));
+        this.renderBell();
+        this.closePanel();
+    },
+
+    renderBell() {
+        const badge = document.getElementById('notif-bell-badge');
+        if (!badge) return;
+        const u = App.currentUser;
+        if (!u || u.role !== 'business') { badge.style.display = 'none'; return; }
+        const count = this.getUnreadCount(u.id);
+        if (count > 0) {
+            badge.textContent = count > 9 ? '9+' : count;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    },
+
+    toggle() {
+        if (this._panelOpen) { this.closePanel(); } else { this.openPanel(); }
+    },
+
+    openPanel() {
+        const panel = document.getElementById('in-app-notifications-panel');
+        const bellBtn = document.getElementById('notif-bell-btn');
+        if (!panel || !bellBtn) return;
+        
+        this._panelOpen = true;
+        this.renderPanel();
+        
+        // Dynamically position the panel relative to the bell button
+        const rect = bellBtn.getBoundingClientRect();
+        panel.style.top = (rect.bottom + 10) + 'px';
+        
+        // Compute available space below, minus 90px to account for the mobile bottom tab bar
+        const availableSpace = window.innerHeight - rect.bottom - 90;
+        
+        if (window.innerWidth <= 860) {
+            panel.style.right = '12px';
+            panel.style.left = '12px';
+            panel.style.width = 'auto';
+            panel.style.maxHeight = Math.max(200, availableSpace) + 'px';
+        } else {
+            // align right edge with bell button's right edge
+            panel.style.right = (window.innerWidth - rect.right) + 'px';
+            panel.style.left = 'auto';
+            panel.style.width = '380px';
+            panel.style.maxHeight = Math.max(300, availableSpace) + 'px';
+        }
+        
+        panel.classList.add('open');
+        // Close on outside click
+        setTimeout(() => {
+            this._outsideHandler = (e) => {
+                if (!panel.contains(e.target) && !e.target.closest('#notif-bell-btn')) {
+                    this.closePanel();
+                }
+            };
+            document.addEventListener('pointerdown', this._outsideHandler);
+        }, 50);
+    },
+
+    closePanel() {
+        const panel = document.getElementById('in-app-notifications-panel');
+        if (panel) panel.classList.remove('open');
+        this._panelOpen = false;
+        if (this._outsideHandler) {
+            document.removeEventListener('pointerdown', this._outsideHandler);
+            this._outsideHandler = null;
+        }
+    },
+
+    renderPanel() {
+        const list = document.getElementById('notif-panel-list');
+        if (!list) return;
+        const u = App.currentUser;
+        if (!u) return;
+        const all = this.getAll(u.id);
+        if (all.length === 0) {
+            list.innerHTML = '<div class="notif-empty"><i class="fas fa-bell-slash"></i><p>No hay notificaciones</p></div>';
+            return;
+        }
+        // Sort newest first
+        all.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        list.innerHTML = all.map(n => {
+            const isUnread = !n.read;
+            const icon = n.type === 'client_deleted_account' ? 'fa-user-slash' : 'fa-bell';
+            const iconColor = n.type === 'client_deleted_account' ? 'notif-icon-danger' : 'notif-icon-info';
+            let message = '';
+            if (n.type === 'client_deleted_account') {
+                message = `<strong>${n.clientName || 'Cliente'}</strong> eliminó su cuenta. `
+                    + `Su cita del <strong>${App.formatDate(n.appointmentDate)}</strong> a las `
+                    + `<strong>${App.formatTime(n.appointmentTime)}</strong>`
+                    + (n.serviceName ? ` (${n.serviceName})` : '')
+                    + (n.employeeName ? ` con ${n.employeeName}` : '')
+                    + ` fue anulada automáticamente.`;
+            } else {
+                message = n.message || 'Notificación del sistema';
+            }
+            const timeAgo = this._timeAgo(n.createdAt);
+            return `<div class="notif-card ${isUnread ? 'unread' : ''}">
+                <div class="notif-card-icon ${iconColor}"><i class="fas ${icon}"></i></div>
+                <div class="notif-card-body">
+                    <p class="notif-card-msg">${message}</p>
+                    <small class="notif-card-time"><i class="fas fa-clock"></i> ${timeAgo}</small>
+                </div>
+            </div>`;
+        }).join('');
+    },
+
+    _timeAgo(isoDate) {
+        if (!isoDate) return '';
+        const diff = Date.now() - new Date(isoDate).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'Ahora';
+        if (mins < 60) return `Hace ${mins} min`;
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return `Hace ${hours}h`;
+        const days = Math.floor(hours / 24);
+        if (days < 7) return `Hace ${days}d`;
+        return App.formatDate(isoDate.slice(0, 10));
+    }
+};
+
 // Force currency symbol with correct UTF-8 glyph.
 App.formatCurrency = function formatCurrencyCRC(n) {
     return '₡' + Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0 });
