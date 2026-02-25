@@ -137,7 +137,7 @@ App.calendar = {
     },
 
     _getWeekDays(offset) {
-        const today = new Date();
+        const today = App.getCRDate();
         today.setHours(0, 0, 0, 0);
         const mondayOffset = (today.getDay() + 6) % 7;
         const monday = new Date(today);
@@ -199,7 +199,7 @@ App.calendar = {
     },
 
     _isToday(dateStr) {
-        return dateStr === new Date().toISOString().slice(0, 10);
+        return dateStr === App.getCRDateString();
     },
 
     _isCompactMode() {

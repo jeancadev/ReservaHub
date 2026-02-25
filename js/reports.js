@@ -154,7 +154,7 @@ App.reports = {
 
         const u = App.currentUser || {};
         const bizName = u.businessName || u.name || 'Mi Negocio';
-        const today = new Date().toLocaleDateString('es-CR', { day: '2-digit', month: 'long', year: 'numeric' });
+        const today = App.getCRDate().toLocaleDateString('es-CR', { day: '2-digit', month: 'long', year: 'numeric' });
         const headers = ['Fecha', 'Hora', 'Cliente', 'Servicio', 'Profesional', 'Precio (₡)', 'Estado'];
         const colCount = headers.length;
 

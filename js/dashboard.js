@@ -5,7 +5,7 @@
 App.dashboard = {
     render() {
         const appts = App.store.getList(App.getBusinessKey('appointments'));
-        const today = new Date().toISOString().slice(0, 10);
+        const today = App.getCRDateString();
         const todayAppts = appts.filter(a => a.date === today && a.status !== 'cancelled');
         const upcomingAppts = appts.filter(a => a.date > today && a.status !== 'cancelled');
         const month = today.slice(0, 7);
@@ -66,7 +66,7 @@ App.dashboard = {
         App.dashboardFilter = filter;
         document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', (filter === 'today' && i === 0) || (filter === 'upcoming' && i === 1)));
         const appts = App.store.getList(App.getBusinessKey('appointments'));
-        const today = new Date().toISOString().slice(0, 10);
+        const today = App.getCRDateString();
         const filtered = filter === 'today'
             ? appts.filter(a => a.date === today && a.status !== 'cancelled')
             : appts.filter(a => a.date > today && a.status !== 'cancelled');

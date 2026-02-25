@@ -570,7 +570,9 @@ const App = {
         return html;
     },
     formatCurrency(n) { return '₡' + Number(n || 0).toLocaleString('es-CR', { minimumFractionDigits: 0 }); },
-    uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+    uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); },
+    getCRDate() { return new Date(new Date().toLocaleString("en-US", {timeZone: "America/Costa_Rica"})); },
+    getCRDateString() { return this.getCRDate().toISOString().slice(0, 10); }
 };
 
 // ---- IN-APP NOTIFICATIONS ----

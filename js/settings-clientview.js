@@ -880,7 +880,7 @@ App.clientView = {
         const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
         const firstDay = new Date(year, m, 1).getDay();
         const daysInMonth = new Date(year, m + 1, 0).getDate();
-        const today = new Date(); today.setHours(0,0,0,0);
+        const today = App.getCRDate(); today.setHours(0,0,0,0);
 
         // Check employee availability key using biz prefix
         const availKey = bd.bizId + '_emp_avail_' + bd.empId;

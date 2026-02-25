@@ -890,7 +890,7 @@ App.appointments = {
 
     _suggestDate(employeeId) {
         const policy = this.getBookingPolicy();
-        const today = new Date();
+        const today = App.getCRDate();
         today.setHours(0, 0, 0, 0);
         const maxDays = Math.max(0, Number(policy.maxDays) || 0);
 
