@@ -697,8 +697,10 @@ App.inAppNotifications = {
         all.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         list.innerHTML = all.map(n => {
             const isUnread = !n.read;
-            const icon = n.type === 'client_deleted_account' ? 'fa-user-slash' : 'fa-bell';
-            const iconColor = n.type === 'client_deleted_account' ? 'notif-icon-danger' : 'notif-icon-info';
+            let icon = 'fa-bell';
+            let iconColor = 'notif-icon-info';
+            if (n.type === 'client_deleted_account') { icon = 'fa-user-slash'; iconColor = 'notif-icon-danger'; }
+            else if (n.type === 'new_booking') { icon = 'fa-calendar-plus'; iconColor = 'notif-icon-success'; }
             let message = '';
             if (n.type === 'client_deleted_account') {
                 message = `<strong>${n.clientName || 'Cliente'}</strong> eliminó su cuenta. `
@@ -707,6 +709,12 @@ App.inAppNotifications = {
                     + (n.serviceName ? ` (${n.serviceName})` : '')
                     + (n.employeeName ? ` con ${n.employeeName}` : '')
                     + ` fue anulada automáticamente.`;
+            } else if (n.type === 'new_booking') {
+                message = `<strong>${n.clientName || 'Cliente'}</strong> reservó una cita para el `
+                    + `<strong>${App.formatDate(n.appointmentDate)}</strong> a las `
+                    + `<strong>${App.formatTime(n.appointmentTime)}</strong>`
+                    + (n.serviceName ? ` — ${n.serviceName}` : '')
+                    + (n.employeeName ? ` con ${n.employeeName}` : '') + '.';
             } else {
                 message = n.message || 'Notificación del sistema';
             }

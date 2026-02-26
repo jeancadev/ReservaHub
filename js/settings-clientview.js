@@ -1200,7 +1200,23 @@ App.clientView = {
         };
         const savedAppt = App.store.addToList(bd.bizId + '_appointments', appointmentObj);
 
-        // Notify the business
+        // Resolve the business user object for notifications
+        const biz = App.store.getList('users').find(x => x.id === bd.bizId);
+
+        // In-app notification for the business owner
+        if (App.inAppNotifications) {
+            App.inAppNotifications.add(bd.bizId, {
+                type: 'new_booking',
+                clientName: u.name || '',
+                clientEmail: u.email || '',
+                appointmentDate: bd.date || '',
+                appointmentTime: bd.time || '',
+                serviceName: bd.serviceName || '',
+                employeeName: assignment.name || ''
+            });
+        }
+
+        // Email notification to the business owner
         if (App.notifications && typeof App.notifications.sendAppointmentNotification === 'function') {
             App.notifications.sendAppointmentNotification({
                 appointment: savedAppt || appointmentObj,
