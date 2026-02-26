@@ -128,44 +128,85 @@ function buildHtml(model: ReturnType<typeof buildModel>): string {
   const detailHtml = detailsRows
     .filter(([_, value]) => value)
     .map(([label, value]) =>
-      `<tr><td style="padding:8px 0;color:#6b7280;font-size:14px;vertical-align:top;width:190px">${escapeHtml(label)}</td><td style="padding:8px 0;color:#111827;font-size:14px;font-weight:600">${escapeHtml(value)}</td></tr>`)
+      `<tr>
+         <td class="mobile-cell label-cell" style="padding:10px 14px 2px 0;color:#6b7280;font-size:14px;vertical-align:top;width:40%;word-wrap:break-word;">
+           ${escapeHtml(label)}
+         </td>
+         <td class="mobile-cell value-cell" style="padding:10px 0 10px 0;color:#111827;font-size:14px;font-weight:600;vertical-align:top;word-wrap:break-word;">
+           ${escapeHtml(value)}
+         </td>
+       </tr>`)
     .join("");
 
   const notesHtml = model.notes
-    ? `<p style="margin:14px 0 0;color:#111827;font-size:14px;line-height:1.5"><strong>Notas del cliente:</strong> ${escapeHtml(model.notes)}</p>`
+    ? `<div style="margin-top:16px;background:#f9fafb;padding:14px;border-radius:8px;border:1px solid #e5e7eb;">
+         <p style="margin:0;color:#111827;font-size:14px;line-height:1.6;word-wrap:break-word;">
+           <strong style="display:block;margin-bottom:4px;color:#374151">Notas del cliente:</strong> 
+           ${escapeHtml(model.notes)}
+         </p>
+       </div>`
     : "";
 
   return `
 <!doctype html>
 <html lang="es">
-  <body style="margin:0;padding:24px;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml(model.subject)}</title>
+    <style>
+      @media screen and (max-width: 480px) {
+        .mobile-container { padding: 12px !important; }
+        .card { border-radius: 8px !important; }
+        .mobile-padding { padding: 20px 16px !important; }
+        .header-padding { padding: 24px 16px 16px !important; }
+        .mobile-cell {
+          display: block !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .label-cell {
+          padding: 12px 0 4px 0 !important;
+          font-weight: 500 !important;
+          border-top: 1px solid #f3f4f6 !important;
+        }
+        .value-cell {
+          padding: 0 0 12px 0 !important;
+        }
+        h1 { font-size: 24px !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:24px;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827;" class="mobile-container">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;" class="card">
       <tr>
-        <td style="padding:28px 28px 18px;border-bottom:1px solid #e5e7eb;background:#2563eb">
-          <h1 style="margin:0;font-size:24px;line-height:1.2;color:#ffffff">¡Nueva Reservación! 🎉</h1>
+        <td style="padding:32px 32px 20px;border-bottom:1px solid #e5e7eb;background:#2563eb;" class="header-padding">
+          <h1 style="margin:0;font-size:26px;line-height:1.2;color:#ffffff">¡Nueva Reservación! 🎉</h1>
         </td>
       </tr>
       <tr>
-        <td style="padding:24px 28px 0">
+        <td style="padding:24px 32px 0;" class="mobile-padding">
           <p style="margin:0 0 14px;font-size:16px;color:#111827">Hola,</p>
-          <p style="margin:0;color:#374151;font-size:14px;line-height:1.7">
+          <p style="margin:0;color:#374151;font-size:15px;line-height:1.6">
             Se ha realizado una nueva reserva en <strong>${escapeHtml(model.businessName)}</strong>.
             Por favor, revisa tu aplicación administrativa para gestionar esta nueva cita.
           </p>
         </td>
       </tr>
       <tr>
-        <td style="padding:16px 28px 0">
-          <h2 style="margin:0 0 12px;font-size:16px;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:8px">Detalles de la cita</h2>
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse">
-            ${detailHtml}
-          </table>
+        <td style="padding:20px 32px 0;" class="mobile-padding">
+          <h2 style="margin:0 0 14px;font-size:18px;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:10px">Detalles de la cita</h2>
+          <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:0 16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:fixed;">
+              ${detailHtml}
+            </table>
+          </div>
           ${notesHtml}
         </td>
       </tr>
       <tr>
-        <td style="padding:24px 28px 30px">
-          <p style="margin:0;color:#374151;font-size:14px;line-height:1.7">
+        <td style="padding:32px;text-align:center;border-top:1px solid #e5e7eb;margin-top:24px;" class="mobile-padding">
+          <p style="margin:0;color:#6b7280;font-size:14px;line-height:1.6">
             Este es un correo automático generado por el sistema de reservas.
           </p>
         </td>
