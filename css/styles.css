@@ -576,6 +576,7 @@ button {
    ============================================ */
 .auth-screen {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -584,6 +585,7 @@ button {
     background-size: 200% 200%;
     animation: bgShift 12s ease infinite;
     padding: 20px;
+    overflow-y: auto;
 }
 
 .auth-container {
@@ -596,6 +598,7 @@ button {
     border: 1px solid rgba(255, 255, 255, 0.8);
     position: relative;
     z-index: 2;
+    flex-shrink: 0;
 }
 
 /* Developer Signature */
@@ -605,6 +608,7 @@ button {
     color: var(--text-secondary);
     font-size: 0.85rem;
     z-index: 2;
+    flex-shrink: 0;
 }
 
 .developer-signature p {
@@ -639,6 +643,116 @@ button {
     background: #fff;
     transform: translateY(-2px);
     box-shadow: var(--shadow-sm);
+}
+
+/* --- Auth screen: compact on short viewports --- */
+@media (max-height: 750px) {
+    .auth-screen {
+        padding: 12px;
+        justify-content: flex-start;
+        padding-top: 16px;
+    }
+
+    .auth-container {
+        padding: 24px 28px;
+    }
+
+    .auth-logo h1 {
+        font-size: 1.5rem;
+    }
+
+    .auth-form h2 {
+        font-size: 1.2rem;
+        margin-top: 4px;
+    }
+
+    .auth-subtitle {
+        margin-bottom: 16px;
+        font-size: 0.82rem;
+    }
+
+    .auth-screen .input-group {
+        margin-bottom: 12px;
+    }
+
+    .auth-screen .input-group label {
+        margin-bottom: 4px;
+        font-size: 0.8rem;
+    }
+
+    .auth-screen .input-wrapper input {
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .auth-switch {
+        margin-top: 14px;
+        margin-bottom: 14px;
+    }
+
+    .developer-signature {
+        margin-top: 16px;
+        font-size: 0.78rem;
+    }
+
+    .developer-links a {
+        width: 28px;
+        height: 28px;
+        font-size: 0.95rem;
+    }
+}
+
+@media (max-height: 650px) {
+    .auth-screen {
+        padding: 8px;
+        padding-top: 10px;
+    }
+
+    .auth-container {
+        padding: 18px 22px;
+    }
+
+    .auth-logo h1 {
+        font-size: 1.3rem;
+    }
+
+    .auth-form h2 {
+        font-size: 1.1rem;
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }
+
+    .auth-subtitle {
+        margin-bottom: 12px;
+        font-size: 0.78rem;
+    }
+
+    .auth-screen .input-group {
+        margin-bottom: 8px;
+    }
+
+    .auth-screen .input-wrapper input {
+        padding-top: 8px;
+        padding-bottom: 8px;
+        font-size: 0.88rem;
+    }
+
+    .auth-switch {
+        margin-top: 10px;
+        margin-bottom: 10px;
+        font-size: 0.82rem;
+    }
+
+    .developer-signature {
+        margin-top: 10px;
+        font-size: 0.72rem;
+    }
+
+    .developer-links a {
+        width: 26px;
+        height: 26px;
+        font-size: 0.88rem;
+    }
 }
 
 .auth-logo h1 {

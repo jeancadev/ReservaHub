@@ -45,7 +45,7 @@
                     <label for="login-password">Contraseña</label>
                     <div class="input-wrapper">
                         <i class="fas fa-lock input-icon-left"></i>
-                        <input type="password" id="login-password" placeholder="Tu contraseña" required autocomplete="current-password">
+                        <input type="password" id="login-password" placeholder="Tu contraseña" required maxlength="8" autocomplete="current-password">
                         <button type="button" class="password-toggle" onclick="App.auth.togglePasswordVisibility('login-password', this)" aria-label="Mostrar contraseña">
                             <i class="fas fa-eye"></i>
                         </button>
