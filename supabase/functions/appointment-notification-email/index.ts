@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import nodemailer from "npm:nodemailer@6.10.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -90,7 +90,7 @@ function buildModel(payload: any, profile: any) {
 
   const subject = `Nueva reservación: ${serviceName} - ${dateLabel} ${timeLabel}`.trim();
 
-  // Determine recipients
+  // Determine recipients (business owner and/or employee)
   const toEmails = new Set<string>();
   if (validEmail(businessEmail)) toEmails.add(businessEmail);
   if (validEmail(employeeEmail)) toEmails.add(employeeEmail);
@@ -126,7 +126,7 @@ function buildHtml(model: ReturnType<typeof buildModel>): string {
   ];
 
   const detailHtml = detailsRows
-    .filter(([_, value]) => value) // only show if value exists
+    .filter(([_, value]) => value)
     .map(([label, value]) =>
       `<tr><td style="padding:8px 0;color:#6b7280;font-size:14px;vertical-align:top;width:190px">${escapeHtml(label)}</td><td style="padding:8px 0;color:#111827;font-size:14px;font-weight:600">${escapeHtml(value)}</td></tr>`)
     .join("");
@@ -149,7 +149,7 @@ function buildHtml(model: ReturnType<typeof buildModel>): string {
         <td style="padding:24px 28px 0">
           <p style="margin:0 0 14px;font-size:16px;color:#111827">Hola,</p>
           <p style="margin:0;color:#374151;font-size:14px;line-height:1.7">
-            Se ha realizado una nueva reserva en **${escapeHtml(model.businessName)}**. 
+            Se ha realizado una nueva reserva en <strong>${escapeHtml(model.businessName)}</strong>.
             Por favor, revisa tu aplicación administrativa para gestionar esta nueva cita.
           </p>
         </td>
@@ -207,45 +207,21 @@ Deno.serve(async (req) => {
     return jsonResponse(405, { sent: false, error: "Method not allowed" });
   }
 
-  const resendApiKey = clean(Deno.env.get("RESEND_API_KEY"), 200);
-  const fromEmail = clean(Deno.env.get("NOTIFY_FROM_EMAIL"), 254);
-  if (!resendApiKey || !fromEmail) {
+  // ── Gmail SMTP config ────────────────────────────────────────────────────
+  const gmailUser = clean(Deno.env.get("GMAIL_USER"), 254);
+  const gmailAppPassword = clean(Deno.env.get("GMAIL_APP_PASSWORD"), 200);
+  if (!gmailUser || !gmailAppPassword) {
     return jsonResponse(500, {
       sent: false,
       reason: "missing-config",
-      error: "Missing RESEND_API_KEY or NOTIFY_FROM_EMAIL env vars.",
+      error: "Missing GMAIL_USER or GMAIL_APP_PASSWORD env vars.",
     });
   }
 
+  // ── Supabase (solo para leer el perfil del negocio) ──────────────────────
   const supabaseUrl = clean(Deno.env.get("SUPABASE_URL"), 200);
+  const supabaseServiceKey = clean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), 300);
   const supabaseAnonKey = clean(Deno.env.get("SUPABASE_ANON_KEY"), 220);
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return jsonResponse(500, {
-      sent: false,
-      reason: "missing-config",
-      error: "Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars.",
-    });
-  }
-
-  const authHeader = req.headers.get("Authorization") || "";
-  if (!authHeader) {
-    return jsonResponse(401, { sent: false, reason: "unauthorized", error: "Missing Authorization header in Deno." });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  const authUser = authData && authData.user ? authData.user : null;
-  if (authError || !authUser) {
-    return jsonResponse(401, {
-      sent: false,
-      reason: "unauthorized",
-      error: `AuthError: ${clean(authError?.message, 240) || "Invalid auth session in getUser."}`,
-      details: authError
-    });
-  }
 
   let payload: any = {};
   try {
@@ -263,15 +239,24 @@ Deno.serve(async (req) => {
     });
   }
 
-  // NOTE: For notifications, the authenticated user is the CLIENT booking the appointment,
-  // NOT the business. So we do NOT enforce \`(requestedBusinessId === authUser.id)\`.
-  // The client is authorized to hit this endpoint for any business they are booking with.
-
-  const { data: profileRow } = await supabase
-    .from("profiles")
-    .select("id,name,email,phone,role,business_name,category,address,description")
-    .eq("id", requestedBusinessId)
-    .maybeSingle();
+  // NOTE: This function is called by the CLIENT booking the appointment.
+  // No JWT verification needed — it's deployed with --no-verify-jwt.
+  // We look up the business profile using the service role key (read-only).
+  let profileRow: any = null;
+  try {
+    if (supabaseUrl && (supabaseServiceKey || supabaseAnonKey)) {
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.1");
+      const adminClient = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey);
+      const { data } = await adminClient
+        .from("profiles")
+        .select("id,name,email,phone,role,business_name,category,address,description")
+        .eq("id", requestedBusinessId)
+        .maybeSingle();
+      profileRow = data;
+    }
+  } catch {
+    // Continue without profile row - we'll use payload data
+  }
 
   const model = buildModel(payload, profileRow || {});
 
@@ -286,40 +271,42 @@ Deno.serve(async (req) => {
   const html = buildHtml(model);
   const text = buildText(model);
 
-  const resendPayload: Record<string, unknown> = {
-    from: fromEmail,
-    to: model.toEmails,
+  // ── Envío via Gmail SMTP con Nodemailer ──────────────────────────────────
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: gmailUser,
+      pass: gmailAppPassword,
+    },
+  });
+
+  const mailOptions: Record<string, unknown> = {
+    from: `"${model.businessName}" <${gmailUser}>`,
+    to: model.toEmails.join(", "),
     subject: model.subject,
     html,
     text,
   };
 
   if (validEmail(model.clientEmail)) {
-    resendPayload.reply_to = model.clientEmail;
+    mailOptions.replyTo = model.clientEmail;
   }
 
-  const resendResponse = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${resendApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(resendPayload),
-  });
-
-  const resendData = await resendResponse.json().catch(() => ({}));
-  if (!resendResponse.ok) {
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    return jsonResponse(200, {
+      sent: true,
+      provider: "gmail-smtp",
+      id: clean(info?.messageId, 200) || null,
+      recipients: model.toEmails,
+    });
+  } catch (err: any) {
     return jsonResponse(502, {
       sent: false,
       reason: "provider-error",
-      error: clean(resendData?.message || resendData?.error || "Email provider rejected request.", 350),
-      provider: "resend",
+      error: clean(err?.message || "Gmail SMTP rejected the request.", 350),
+      provider: "gmail-smtp",
     });
   }
-
-  return jsonResponse(200, {
-    sent: true,
-    provider: "resend",
-    id: clean(resendData?.id, 120) || null,
-  });
 });
+

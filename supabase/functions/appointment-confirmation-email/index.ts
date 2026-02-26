@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import nodemailer from "npm:nodemailer@6.10.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -267,16 +268,18 @@ Deno.serve(async (req) => {
     return jsonResponse(405, { sent: false, error: "Method not allowed" });
   }
 
-  const resendApiKey = clean(Deno.env.get("RESEND_API_KEY"), 200);
-  const fromEmail = clean(Deno.env.get("NOTIFY_FROM_EMAIL"), 254);
-  if (!resendApiKey || !fromEmail) {
+  // ── Gmail SMTP config ────────────────────────────────────────────────────
+  const gmailUser = clean(Deno.env.get("GMAIL_USER"), 254);
+  const gmailAppPassword = clean(Deno.env.get("GMAIL_APP_PASSWORD"), 200);
+  if (!gmailUser || !gmailAppPassword) {
     return jsonResponse(500, {
       sent: false,
       reason: "missing-config",
-      error: "Missing RESEND_API_KEY or NOTIFY_FROM_EMAIL env vars.",
+      error: "Missing GMAIL_USER or GMAIL_APP_PASSWORD env vars.",
     });
   }
 
+  // ── Supabase auth ────────────────────────────────────────────────────────
   const supabaseUrl = clean(Deno.env.get("SUPABASE_URL"), 200);
   const supabaseAnonKey = clean(Deno.env.get("SUPABASE_ANON_KEY"), 220);
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -289,7 +292,7 @@ Deno.serve(async (req) => {
 
   const authHeader = req.headers.get("Authorization") || "";
   if (!authHeader) {
-    return jsonResponse(401, { sent: false, reason: "unauthorized", error: "Missing Authorization header in Deno." });
+    return jsonResponse(401, { sent: false, reason: "unauthorized", error: "Missing Authorization header." });
   }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -302,7 +305,7 @@ Deno.serve(async (req) => {
     return jsonResponse(401, {
       sent: false,
       reason: "unauthorized",
-      error: `AuthError: ${clean(authError?.message, 240) || "Invalid auth session in getUser."}`,
+      error: `AuthError: ${clean(authError?.message, 240) || "Invalid auth session."}`,
       details: authError
     });
   }
@@ -358,40 +361,40 @@ Deno.serve(async (req) => {
   const html = buildHtml(model);
   const text = buildText(model);
 
-  const resendPayload: Record<string, unknown> = {
-    from: fromEmail,
-    to: [model.toEmail],
+  // ── Envío via Gmail SMTP con Nodemailer ──────────────────────────────────
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: gmailUser,
+      pass: gmailAppPassword,
+    },
+  });
+
+  const mailOptions: Record<string, unknown> = {
+    from: `"${model.businessName}" <${gmailUser}>`,
+    to: model.toEmail,
     subject: model.subject,
     html,
     text,
   };
 
-  if (validEmail(model.businessEmail)) {
-    resendPayload.reply_to = model.businessEmail;
+  if (validEmail(model.businessEmail) && model.businessEmail !== gmailUser) {
+    mailOptions.replyTo = model.businessEmail;
   }
 
-  const resendResponse = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${resendApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(resendPayload),
-  });
-
-  const resendData = await resendResponse.json().catch(() => ({}));
-  if (!resendResponse.ok) {
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    return jsonResponse(200, {
+      sent: true,
+      provider: "gmail-smtp",
+      id: clean(info?.messageId, 200) || null,
+    });
+  } catch (err: any) {
     return jsonResponse(502, {
       sent: false,
       reason: "provider-error",
-      error: clean(resendData?.message || resendData?.error || "Email provider rejected request.", 350),
-      provider: "resend",
+      error: clean(err?.message || "Gmail SMTP rejected the request.", 350),
+      provider: "gmail-smtp",
     });
   }
-
-  return jsonResponse(200, {
-    sent: true,
-    provider: "resend",
-    id: clean(resendData?.id, 120) || null,
-  });
 });
