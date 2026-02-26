@@ -76,6 +76,12 @@
             await this.refreshUsersCache();
             await this.hydrateStateCache();
             App.showApp();
+
+            // Start real-time subscription after UI is ready
+            if (App.realtime && typeof App.realtime.start === 'function') {
+                App.realtime.start();
+            }
+
             return true;
         },
 
@@ -283,6 +289,12 @@
             if (!profile) throw new Error('No se pudo cargar tu perfil.');
             await this.refreshUsersCache();
             await this.hydrateStateCache();
+            // Start realtime subscription — will be triggered after App.showApp() in auth.js
+            setTimeout(() => {
+                if (App.realtime && typeof App.realtime.start === 'function') {
+                    App.realtime.start();
+                }
+            }, 100);
             return profile;
         },
 
@@ -468,3 +480,200 @@
         }
     };
 })();
+
+/* ============================================
+   ReservaHub - Realtime Module
+   Supabase WebSocket subscription to app_state.
+   Keeps all connected browsers in sync without
+   requiring a page refresh.
+   ============================================ */
+
+App.realtime = {
+    _channel: null,
+    _active: false,
+
+    start() {
+        // Guard: only start if Supabase is ready and not already subscribed
+        if (!App.backend || !App.backend.isCloudReady()) return;
+        if (this._active) return;
+
+        const client = App.backend.client;
+        if (!client || typeof client.channel !== 'function') return;
+
+        this._channel = client
+            .channel('realtime:app_state')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'app_state' },
+                (payload) => this._onStateChange(payload)
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'app_state' },
+                (payload) => this._onStateChange(payload)
+            )
+            .on(
+                'postgres_changes',
+                { event: 'DELETE', schema: 'public', table: 'app_state' },
+                (payload) => this._onStateDelete(payload)
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    this._active = true;
+                    console.log('[Realtime] Subscribed to app_state changes.');
+                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    console.warn('[Realtime] Subscription issue:', status);
+                    this._active = false;
+                }
+            });
+    },
+
+    stop() {
+        if (this._channel && App.backend && App.backend.client) {
+            App.backend.client.removeChannel(this._channel).catch(() => {});
+        }
+        this._channel = null;
+        this._active = false;
+        console.log('[Realtime] Unsubscribed.');
+    },
+
+    _onStateChange(payload) {
+        const row = payload.new;
+        if (!row || !row.key) return;
+
+        const key = row.key;
+        const newValue = row.value;
+        const changedBy = row.updated_by || null;
+        const myUserId = App.backend && App.backend.authUserId;
+        const isOwnChange = changedBy && myUserId && changedBy === myUserId;
+
+        // 1. Snapshot BEFORE update (needed to detect what changed)
+        const prevValue = App.store.getList(key);
+
+        // 2. Update local store silently (skipCloud avoids re-sending to Supabase)
+        App.store.set(key, newValue, { skipCloud: true });
+
+        // 3. If this is our own write, only update store — UI is already current
+        if (isOwnChange) return;
+
+        // 4. Determine what type of data changed
+        const u = App.currentUser;
+        if (!u) return;
+
+        const isAppointmentsKey = key.endsWith('_appointments');
+        const isNotificationsKey = key.endsWith('_in_app_notifications');
+
+        // --- BUSINESS OWNER: receives client reservation or changes ---
+        if (u.role === 'business' && isAppointmentsKey) {
+            const bizKey = u.id + '_appointments';
+            if (key === bizKey) {
+                const event = payload.eventType; // 'INSERT' or 'UPDATE'
+                const prevList = Array.isArray(prevValue) ? prevValue : [];
+
+                if (event === 'INSERT') {
+                    // Find the newest appointment from the new list
+                    const newList = Array.isArray(newValue) ? newValue : [];
+                    const prevIds = new Set(prevList.map(a => a.id));
+                    const added = newList.filter(a => !prevIds.has(a.id));
+                    if (added.length > 0) {
+                        const appt = added[added.length - 1];
+                        // Add in-app notification
+                        if (App.inAppNotifications) {
+                            App.inAppNotifications.add(u.id, {
+                                type: 'new_booking',
+                                clientName: appt.clientName || '',
+                                clientEmail: appt.clientEmail || '',
+                                appointmentDate: appt.date || '',
+                                appointmentTime: appt.time || '',
+                                serviceName: appt.serviceName || '',
+                                employeeName: appt.employeeName || ''
+                            });
+                            App.inAppNotifications.renderBell();
+                        }
+                        App.toast.show(
+                            `🗓️ Nueva cita de ${appt.clientName || 'un cliente'} para el ${App.formatDate(appt.date)} a las ${App.formatTime(appt.time)}`,
+                            'success'
+                        );
+                    }
+                }
+                // Refresh views in any case (new or updated appointment)
+                this._refreshViews();
+            }
+        }
+
+        // --- CLIENT: receives confirmation from business ---
+        if (u.role === 'client' && isAppointmentsKey) {
+            const prevList = Array.isArray(prevValue) ? prevValue : [];
+            const newList = Array.isArray(newValue) ? newValue : [];
+
+            // Find appointments belonging to this client
+            const myEmail = (u.email || '').toLowerCase();
+            const myAppts = newList.filter(a =>
+                (a.clientEmail || '').toLowerCase() === myEmail ||
+                a.clientName === u.name
+            );
+            const prevMyAppts = prevList.filter(a =>
+                (a.clientEmail || '').toLowerCase() === myEmail ||
+                a.clientName === u.name
+            );
+
+            // Check if any of our appointments changed status to 'confirmed'
+            myAppts.forEach(appt => {
+                const prev = prevMyAppts.find(p => p.id === appt.id);
+                if (prev && prev.status !== 'confirmed' && appt.status === 'confirmed') {
+                    App.toast.show(
+                        `✅ ¡Tu cita del ${App.formatDate(appt.date)} a las ${App.formatTime(appt.time)} fue confirmada!`,
+                        'success'
+                    );
+                } else if (prev && prev.status !== 'cancelled' && appt.status === 'cancelled') {
+                    App.toast.show(
+                        `❌ Tu cita del ${App.formatDate(appt.date)} fue cancelada.`,
+                        'warning'
+                    );
+                }
+            });
+
+            this._refreshViews();
+        }
+
+        // --- GENERAL: other keys (schedule, services, employees, etc.) ---
+        if (!isAppointmentsKey && !isNotificationsKey) {
+            // Only refresh if the key belongs to a business the user interacts with
+            const users = App.store.getList('users');
+            const keyBelongsToKnownBiz = users.some(usr =>
+                usr.role === 'business' && key.startsWith(usr.id + '_')
+            );
+            if (keyBelongsToKnownBiz) {
+                this._refreshViews();
+            }
+        }
+    },
+
+    _onStateDelete(payload) {
+        const row = payload.old;
+        if (!row || !row.key) return;
+        App.store.remove(row.key, { skipCloud: true });
+    },
+
+    _refreshViews() {
+        try {
+            if (App.dashboard && typeof App.dashboard.render === 'function') {
+                App.dashboard.render();
+            }
+            if (App.calendar && typeof App.calendar.render === 'function' && App.currentSection === 'calendar') {
+                App.calendar.render();
+            }
+            if (App.clients && typeof App.clients.render === 'function' && App.currentSection === 'clients') {
+                App.clients.render();
+            }
+            if (App.clientView && typeof App.clientView.render === 'function' && App.currentSection === 'client-dashboard') {
+                App.clientView.render();
+            }
+            if (App.clientView && typeof App.clientView.renderHistory === 'function' && App.currentSection === 'client-history') {
+                App.clientView.renderHistory();
+            }
+        } catch (err) {
+            console.error('[Realtime] Error refreshing views:', err);
+        }
+    }
+};

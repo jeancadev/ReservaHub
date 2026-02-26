@@ -487,6 +487,8 @@ App.auth = {
 
     async logout(options = {}) {
         const reason = options && options.reason ? String(options.reason) : '';
+        // Stop realtime subscription before clearing session
+        if (App.realtime && typeof App.realtime.stop === 'function') App.realtime.stop();
         if (App.session && typeof App.session.stop === 'function') App.session.stop();
         if (App.ui && typeof App.ui.closeMobileProfile === 'function') App.ui.closeMobileProfile();
         if (App.ui && typeof App.ui.closeSidebar === 'function') App.ui.closeSidebar();
