@@ -577,19 +577,8 @@ App.realtime = {
                     const added = newList.filter(a => !prevIds.has(a.id));
                     if (added.length > 0) {
                         const appt = added[added.length - 1];
-                        // Add in-app notification
-                        if (App.inAppNotifications) {
-                            App.inAppNotifications.add(u.id, {
-                                type: 'new_booking',
-                                clientName: appt.clientName || '',
-                                clientEmail: appt.clientEmail || '',
-                                appointmentDate: appt.date || '',
-                                appointmentTime: appt.time || '',
-                                serviceName: appt.serviceName || '',
-                                employeeName: appt.employeeName || ''
-                            });
-                            App.inAppNotifications.renderBell();
-                        }
+                        // El cliente ya gneró la notificación en inAppNotifications, así que
+                        // aquí solo mostramos el Toast para que el dueño se entere si tiene la app abierta.
                         App.toast.show(
                             `🗓️ Nueva cita de ${appt.clientName || 'un cliente'} para el ${App.formatDate(appt.date)} a las ${App.formatTime(appt.time)}`,
                             'success'
@@ -598,6 +587,22 @@ App.realtime = {
                 }
                 // Refresh views in any case (new or updated appointment)
                 this._refreshViews();
+            }
+        }
+
+        // --- BUSINESS OWNER: receives in-app notifications ---
+        if (u.role === 'business' && isNotificationsKey) {
+            const notifKey = u.id + '_in_app_notifications';
+            if (key === notifKey) {
+                if (App.inAppNotifications && typeof App.inAppNotifications.renderBell === 'function') {
+                    App.inAppNotifications.renderBell();
+                    
+                    // Si el panel está abierto, repintarlo con las notificaciones nuevas
+                    const panelContent = document.getElementById('notif-content');
+                    if (panelContent && App.inAppNotifications._panelOpen && typeof App.inAppNotifications._renderList === 'function') {
+                        App.inAppNotifications._renderList(panelContent, u.id);
+                    }
+                }
             }
         }
 
