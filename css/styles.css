@@ -104,6 +104,7 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    -webkit-tap-highlight-color: transparent;
 }
 
 html {
@@ -576,6 +577,7 @@ button {
 .auth-screen {
     min-height: 100vh;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #e8ecf8 0%, #f0f2f8 40%, #e0e7ff 100%);
@@ -592,6 +594,51 @@ button {
     max-width: 440px;
     box-shadow: var(--shadow-xl);
     border: 1px solid rgba(255, 255, 255, 0.8);
+    position: relative;
+    z-index: 2;
+}
+
+/* Developer Signature */
+.developer-signature {
+    margin-top: 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    z-index: 2;
+}
+
+.developer-signature p {
+    margin-bottom: 8px;
+}
+
+.developer-signature strong {
+    color: var(--primary);
+}
+
+.developer-links {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.developer-links a {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    transition: all var(--transition-base);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.developer-links a:hover {
+    color: var(--primary);
+    background: #fff;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
 }
 
 .auth-logo h1 {
@@ -800,6 +847,7 @@ input::-ms-clear {
 .auth-switch {
     text-align: center;
     margin-top: 20px;
+    margin-bottom: 20px;
     font-size: 0.9rem;
     color: var(--text-secondary);
 }
@@ -4255,15 +4303,15 @@ input::-ms-clear {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    font-size: 0.6rem;
+    gap: 4px;
+    font-size: 0.68rem;
     font-weight: 600;
     min-width: 0;
     font-family: var(--font);
 }
 
 .mobile-tab i {
-    font-size: 0.86rem;
+    font-size: 1.35rem;
 }
 
 .mobile-tab span {
@@ -4606,11 +4654,11 @@ input::-ms-clear {
     }
 
     .mobile-tab {
-        font-size: 0.56rem;
+        font-size: 0.64rem;
     }
 
     .mobile-tab i {
-        font-size: 0.8rem;
+        font-size: 1.2rem;
     }
 
     .mobile-profile-panel {
@@ -5518,12 +5566,12 @@ select.premium-select-source {
         min-height: 56px;
         border-radius: 12px;
         gap: 4px;
-        font-size: 0.58rem;
+        font-size: 0.68rem;
         font-weight: 700;
     }
 
     .mobile-tab i {
-        font-size: 0.92rem;
+        font-size: 1.35rem;
     }
 
     .mobile-tab.active {
@@ -6103,14 +6151,13 @@ select.premium-select-source {
     position: absolute;
     top: -4px;
     right: -4px;
-    min-width: 22px;
-    height: 22px;
+    min-width: 20px;
+    height: 20px;
     border-radius: 999px;
     background: var(--accent-red, #ef233c);
     color: #fff;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 800;
-    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;

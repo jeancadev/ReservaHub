@@ -340,20 +340,35 @@ App.auth = {
                 return false;
             } catch (err) {
                 console.error('Supabase login error:', err);
-                App.toast.show(this.mapAuthError(err), 'error');
+                const code = String(err && err.code ? err.code : '').toLowerCase();
+                const msg = String(err && err.message ? err.message : '').toLowerCase();
+                
+                // If invalid credentials, it could mean wrong password OR user doesn't exist
+                if (code.includes('invalid_login_credentials') || msg.includes('invalid login credentials')) {
+                    App.toast.show('Email o contraseña incorrectos. Si no tienes cuenta, ¡regístrate!', 'error');
+                } else {
+                    App.toast.show(this.mapAuthError(err), 'error');
+                }
                 return false;
             }
         }
 
         const users = App.store.getList('users');
-        const user = users.find(u => u.email === email && u.password === password);
-        if (!user) {
-            App.toast.show('Email o contrasena incorrectos', 'error');
+        const userByEmail = users.find(u => u.email === email);
+        
+        if (!userByEmail) {
+            App.toast.show('No se encontró una cuenta con ese correo. Por favor, regístrate.', 'warning');
             return false;
         }
-        App.currentUser = user;
-        App.store.set('currentUser', user, { skipCloud: true });
-        App.toast.show('Bienvenido de vuelta, ' + user.name + '!', 'success');
+
+        if (userByEmail.password !== password) {
+            App.toast.show('Contraseña incorrecta', 'error');
+            return false;
+        }
+
+        App.currentUser = userByEmail;
+        App.store.set('currentUser', userByEmail, { skipCloud: true });
+        App.toast.show('Bienvenido de vuelta, ' + userByEmail.name + '!', 'success');
         App.showApp();
         return false;
     },

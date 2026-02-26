@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20260223a">
+    <link rel="stylesheet" href="css/styles.css?v=20260225b">
     <!-- Favicon: Scissors-Clock -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
@@ -210,6 +210,16 @@
             <p class="auth-switch">¿Ya tienes cuenta? <a href="#" onclick="App.auth.showLogin()">Inicia sesión</a></p>
         </div>
     </div>
+    
+    <!-- DEVELOPER SIGNATURE -->
+    <div class="developer-signature animate-fade-up">
+        <p>Desarrollado por <strong>Jean Carlos Obando</strong></p>
+        <div class="developer-links">
+            <a href="mailto:jean.obandocortes@gmail.com" title="Email" target="_blank" rel="noopener"><i class="fas fa-envelope"></i></a>
+            <a href="https://github.com/jeancadev" title="GitHub" target="_blank" rel="noopener"><i class="fab fa-github"></i></a>
+            <a href="https://www.linkedin.com/in/jeancarlosobando" title="LinkedIn" target="_blank" rel="noopener"><i class="fab fa-linkedin"></i></a>
+        </div>
+    </div>
 </section>
 
 <!-- ============ MAIN APP SHELL ============ -->
@@ -354,8 +364,8 @@
                     <div class="notif-bell-wrap">
                         <button type="button" class="btn btn-outline notif-bell-btn ripple-btn" id="notif-bell-btn" onclick="App.inAppNotifications.toggle()" title="Notificaciones">
                             <i class="fas fa-bell"></i>
-                            <span class="notif-bell-badge" id="notif-bell-badge" style="display:none">0</span>
                         </button>
+                        <span class="notif-bell-badge" id="notif-bell-badge" style="display:none">0</span>
                     </div>
                     <button class="btn btn-primary ripple-btn" onclick="App.appointments.showCreate()">
                         <i class="fas fa-plus"></i> Nueva Cita
