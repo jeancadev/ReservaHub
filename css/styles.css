@@ -6231,10 +6231,6 @@ select.premium-select-source {
         min-height: 200px;
     }
 
-    .table-wrapper {
-        margin-inline: -12px;
-        padding-inline: 12px;
-    }
 }
 
 /* ============================================
