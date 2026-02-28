@@ -801,7 +801,83 @@ App.qrShare = {
         const boxPadding = isMobile ? 32 : 40;
         const sizeBySpace = Math.floor(previewWidth - boxPadding);
 
-        return Math.max(140, Math.min(200, sizeBySpace));
+        return Math.max(140, Math.min(220, sizeBySpace));
+    },
+
+    _getRenderSize(displaySize) {
+        const dpr = Math.min(4, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
+        return Math.max(320, Math.round(displaySize * dpr));
+    },
+
+    _applyPreviewSize(container, displaySize) {
+        const qrCanvas = container.querySelector('canvas');
+        const qrImg = container.querySelector('img');
+        const sizePx = `${displaySize}px`;
+
+        if (qrCanvas) {
+            qrCanvas.style.width = sizePx;
+            qrCanvas.style.height = sizePx;
+            qrCanvas.style.maxWidth = '100%';
+            qrCanvas.style.imageRendering = 'pixelated';
+            qrCanvas.style.imageRendering = 'crisp-edges';
+        }
+
+        if (qrImg) {
+            qrImg.style.width = sizePx;
+            qrImg.style.height = sizePx;
+            qrImg.style.maxWidth = '100%';
+            qrImg.style.imageRendering = 'pixelated';
+            qrImg.style.imageRendering = 'crisp-edges';
+        }
+    },
+
+    async _buildQrSource(text, size) {
+        if (typeof QRCode === 'undefined') return null;
+
+        const holder = document.createElement('div');
+        holder.style.position = 'fixed';
+        holder.style.left = '-9999px';
+        holder.style.top = '0';
+        holder.style.width = '0';
+        holder.style.height = '0';
+        holder.style.overflow = 'hidden';
+        document.body.appendChild(holder);
+
+        try {
+            new QRCode(holder, {
+                text,
+                width: size,
+                height: size,
+                colorDark: '#1a1a2e',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            await new Promise(resolve => requestAnimationFrame(resolve));
+
+            const canvas = holder.querySelector('canvas');
+            if (canvas) return canvas;
+
+            const img = holder.querySelector('img');
+            if (!img) return null;
+            if (!img.complete) {
+                await new Promise((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = () => reject(new Error('QR image load failed'));
+                });
+            }
+
+            const out = document.createElement('canvas');
+            out.width = size;
+            out.height = size;
+            const outCtx = out.getContext('2d');
+            if (!outCtx) return null;
+            outCtx.imageSmoothingEnabled = false;
+            outCtx.drawImage(img, 0, 0, size, size);
+            return out;
+        } finally {
+            document.body.removeChild(holder);
+        }
     },
 
     generate() {
@@ -827,21 +903,23 @@ App.qrShare = {
 
         try {
             const qrSize = this._getResponsiveSize(container);
+            const qrRenderSize = this._getRenderSize(qrSize);
             this._qr = new QRCode(container, {
                 text: url,
-                width: qrSize,
-                height: qrSize,
+                width: qrRenderSize,
+                height: qrRenderSize,
                 colorDark: '#1a1a2e',
                 colorLight: '#ffffff',
                 correctLevel: QRCode.CorrectLevel.H
             });
+            requestAnimationFrame(() => this._applyPreviewSize(container, qrSize));
         } catch (err) {
             console.error('QR generation error:', err);
             container.innerHTML = '<p style="color:var(--accent-red);font-size:0.85rem;">Error al generar el QR</p>';
         }
     },
 
-    download() {
+    async download() {
         const container = document.getElementById('qr-code-container');
         if (!container) return;
 
@@ -855,11 +933,12 @@ App.qrShare = {
         // Build a branded canvas with the QR + business name
         const u = App.currentUser || {};
         const businessName = u.businessName || u.name || 'Mi Negocio';
+        const url = this._url || (window.location.origin + window.location.pathname);
 
-        const padding = 40;
-        const qrSize = 200;
-        const headerHeight = 50;
-        const footerHeight = 35;
+        const qrSize = 1024;
+        const padding = 96;
+        const headerHeight = 96;
+        const footerHeight = 72;
         const totalW = qrSize + padding * 2;
         const totalH = headerHeight + qrSize + footerHeight + padding * 2;
 
@@ -875,18 +954,30 @@ App.qrShare = {
 
         // Header (business name)
         ctx.fillStyle = '#1a1a2e';
-        ctx.font = 'bold 16px Inter, sans-serif';
+        ctx.font = '700 44px Inter, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(businessName, totalW / 2, padding + 20);
+        ctx.fillText(businessName, totalW / 2, padding + 50);
 
-        // Draw QR
-        const qrSource = qrCanvas || qrImg;
+        // Draw QR in HD
+        let qrSource = null;
+        try {
+            qrSource = await this._buildQrSource(url, qrSize);
+        } catch (err) {
+            console.error('QR HD source error:', err);
+        }
+        qrSource = qrSource || qrCanvas || qrImg;
+        if (!qrSource) {
+            App.toast.show('No se pudo generar QR HD', 'error');
+            return;
+        }
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(qrSource, padding, padding + headerHeight, qrSize, qrSize);
+        ctx.imageSmoothingEnabled = true;
 
         // Footer
         ctx.fillStyle = '#6b7280';
-        ctx.font = '11px Inter, sans-serif';
-        ctx.fillText('Escanea para reservar', totalW / 2, padding + headerHeight + qrSize + 22);
+        ctx.font = '28px Inter, sans-serif';
+        ctx.fillText('Escanea para reservar', totalW / 2, padding + headerHeight + qrSize + 48);
 
         // Download
         const link = document.createElement('a');

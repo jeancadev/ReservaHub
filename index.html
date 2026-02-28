@@ -579,12 +579,15 @@
                         <option value="month" selected>Este Mes</option>
                         <option value="year">Este Año</option>
                     </select>
-                    <input
-                        type="date"
-                        id="report-day"
-                        class="select-input report-day-input"
-                        onchange="App.reports.render()"
-                        aria-label="Seleccionar día para ingresos diarios">
+                    <div class="report-day-field">
+                        <input
+                            type="date"
+                            id="report-day"
+                            class="select-input report-day-input"
+                            onchange="App.reports.render()"
+                            aria-label="Seleccionar día para ingresos diarios">
+                        <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                    </div>
                     <button class="btn btn-outline ripple-btn" onclick="App.reports.exportExcel()">
                         <i class="fas fa-file-excel"></i> Exportar Excel
                     </button>
