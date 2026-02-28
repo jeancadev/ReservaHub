@@ -801,12 +801,12 @@ App.qrShare = {
         const boxPadding = isMobile ? 32 : 40;
         const sizeBySpace = Math.floor(previewWidth - boxPadding);
 
-        return Math.max(140, Math.min(220, sizeBySpace));
+        return Math.max(150, Math.min(240, sizeBySpace));
     },
 
     _getRenderSize(displaySize) {
-        const dpr = Math.min(4, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
-        return Math.max(320, Math.round(displaySize * dpr));
+        const dpr = Math.min(6, Math.max(3, Math.ceil(window.devicePixelRatio || 1)));
+        return Math.max(720, Math.round(displaySize * dpr));
     },
 
     _applyPreviewSize(container, displaySize) {
@@ -880,7 +880,171 @@ App.qrShare = {
         }
     },
 
-    generate() {
+    _getBusinessLogoUrl() {
+        if (!App.currentUser) return '';
+        if (typeof App.getBusinessPhotoUrl === 'function') {
+            return String(App.getBusinessPhotoUrl(App.currentUser) || '');
+        }
+        return String(App.currentUser.businessPhoto || '');
+    },
+
+    async _loadImage(url) {
+        const src = String(url || '').trim();
+        if (!src) return null;
+        return await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.decoding = 'async';
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('Logo image load failed'));
+            img.src = src;
+        });
+    },
+
+    _roundRect(ctx, x, y, w, h, r) {
+        const radius = Math.max(0, Math.min(r, w / 2, h / 2));
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + w - radius, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        ctx.lineTo(x + w, y + h - radius);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        ctx.lineTo(x + radius, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+    },
+
+    _getLogoCropRect(logoImg) {
+        const w = Number(logoImg.naturalWidth || logoImg.width || 0);
+        const h = Number(logoImg.naturalHeight || logoImg.height || 0);
+        if (!w || !h) return { sx: 0, sy: 0, sw: 0, sh: 0 };
+
+        const probe = document.createElement('canvas');
+        probe.width = w;
+        probe.height = h;
+        const pctx = probe.getContext('2d', { willReadFrequently: true });
+        if (!pctx) return { sx: 0, sy: 0, sw: w, sh: h };
+
+        pctx.drawImage(logoImg, 0, 0, w, h);
+        const data = pctx.getImageData(0, 0, w, h).data;
+
+        let left = w;
+        let top = h;
+        let right = -1;
+        let bottom = -1;
+
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const i = ((y * w) + x) * 4;
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                const a = data[i + 3];
+
+                if (a < 18) continue;
+                if (r >= 246 && g >= 246 && b >= 246) continue;
+
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+        }
+
+        if (right < left || bottom < top) return { sx: 0, sy: 0, sw: w, sh: h };
+
+        const pad = Math.max(1, Math.round(Math.max(w, h) * 0.02));
+        const sx = Math.max(0, left - pad);
+        const sy = Math.max(0, top - pad);
+        const ex = Math.min(w - 1, right + pad);
+        const ey = Math.min(h - 1, bottom + pad);
+        return {
+            sx,
+            sy,
+            sw: Math.max(1, ex - sx + 1),
+            sh: Math.max(1, ey - sy + 1)
+        };
+    },
+
+    _drawLogoBadge(ctx, logoImg, size) {
+        if (!ctx || !logoImg) return;
+
+        const badgeSize = Math.round(size * 0.30);
+        const logoSize = Math.round(size * 0.21);
+        const bx = Math.round((size - badgeSize) / 2);
+        const by = Math.round((size - badgeSize) / 2);
+        const logoX = Math.round((size - logoSize) / 2);
+        const logoY = Math.round((size - logoSize) / 2);
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.14)';
+        ctx.shadowBlur = Math.max(8, Math.round(size * 0.02));
+        ctx.fillStyle = '#ffffff';
+        this._roundRect(ctx, bx, by, badgeSize, badgeSize, Math.round(badgeSize * 0.18));
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        this._roundRect(ctx, bx, by, badgeSize, badgeSize, Math.round(badgeSize * 0.18));
+        ctx.clip();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(bx, by, badgeSize, badgeSize);
+        ctx.restore();
+
+        const crop = this._getLogoCropRect(logoImg);
+        const srcW = Number(crop.sw || 0);
+        const srcH = Number(crop.sh || 0);
+        if (!srcW || !srcH) return;
+
+        const scale = Math.max(logoSize / srcW, logoSize / srcH);
+        const drawW = srcW * scale;
+        const drawH = srcH * scale;
+        const drawX = logoX - ((drawW - logoSize) / 2);
+        const drawY = logoY - ((drawH - logoSize) / 2);
+
+        ctx.save();
+        this._roundRect(ctx, logoX, logoY, logoSize, logoSize, Math.round(logoSize * 0.18));
+        ctx.clip();
+        const upscale = drawW > (srcW * 1.2) || drawH > (srcH * 1.2);
+        ctx.imageSmoothingEnabled = !upscale;
+        ctx.imageSmoothingQuality = upscale ? 'low' : 'high';
+        ctx.drawImage(logoImg, crop.sx, crop.sy, srcW, srcH, drawX, drawY, drawW, drawH);
+        ctx.restore();
+    },
+
+    async _composeQrCanvas(text, size, options = {}) {
+        const qrSource = await this._buildQrSource(text, size);
+        if (!qrSource) return null;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(qrSource, 0, 0, size, size);
+
+        if (options.withLogo !== false) {
+            const logoUrl = this._getBusinessLogoUrl();
+            if (logoUrl) {
+                try {
+                    const logoImg = await this._loadImage(logoUrl);
+                    if (logoImg) this._drawLogoBadge(ctx, logoImg, size);
+                } catch (err) {
+                    console.warn('QR logo skipped:', err);
+                }
+            }
+        }
+
+        return canvas;
+    },
+
+    async generate() {
         const container = document.getElementById('qr-code-container');
         const urlEl = document.getElementById('qr-share-url');
         if (!container) return;
@@ -904,15 +1068,12 @@ App.qrShare = {
         try {
             const qrSize = this._getResponsiveSize(container);
             const qrRenderSize = this._getRenderSize(qrSize);
-            this._qr = new QRCode(container, {
-                text: url,
-                width: qrRenderSize,
-                height: qrRenderSize,
-                colorDark: '#1a1a2e',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.H
-            });
-            requestAnimationFrame(() => this._applyPreviewSize(container, qrSize));
+            const qrCanvas = await this._composeQrCanvas(url, qrRenderSize, { withLogo: true });
+            if (!qrCanvas) throw new Error('QR canvas not available');
+
+            container.appendChild(qrCanvas);
+            this._applyPreviewSize(container, qrSize);
+            this._qr = qrCanvas;
         } catch (err) {
             console.error('QR generation error:', err);
             container.innerHTML = '<p style="color:var(--accent-red);font-size:0.85rem;">Error al generar el QR</p>';
@@ -923,22 +1084,15 @@ App.qrShare = {
         const container = document.getElementById('qr-code-container');
         if (!container) return;
 
-        const qrCanvas = container.querySelector('canvas');
-        const qrImg = container.querySelector('img');
-        if (!qrCanvas && !qrImg) {
-            App.toast.show('Primero genera el código QR', 'warning');
-            return;
-        }
-
         // Build a branded canvas with the QR + business name
         const u = App.currentUser || {};
         const businessName = u.businessName || u.name || 'Mi Negocio';
         const url = this._url || (window.location.origin + window.location.pathname);
 
-        const qrSize = 1024;
-        const padding = 96;
-        const headerHeight = 96;
-        const footerHeight = 72;
+        const qrSize = 1600;
+        const padding = 120;
+        const headerHeight = 132;
+        const footerHeight = 96;
         const totalW = qrSize + padding * 2;
         const totalH = headerHeight + qrSize + footerHeight + padding * 2;
 
@@ -954,18 +1108,17 @@ App.qrShare = {
 
         // Header (business name)
         ctx.fillStyle = '#1a1a2e';
-        ctx.font = '700 44px Inter, sans-serif';
+        ctx.font = '700 58px Inter, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(businessName, totalW / 2, padding + 50);
+        ctx.fillText(businessName, totalW / 2, padding + 70);
 
         // Draw QR in HD
         let qrSource = null;
         try {
-            qrSource = await this._buildQrSource(url, qrSize);
+            qrSource = await this._composeQrCanvas(url, qrSize, { withLogo: true });
         } catch (err) {
             console.error('QR HD source error:', err);
         }
-        qrSource = qrSource || qrCanvas || qrImg;
         if (!qrSource) {
             App.toast.show('No se pudo generar QR HD', 'error');
             return;
@@ -976,8 +1129,8 @@ App.qrShare = {
 
         // Footer
         ctx.fillStyle = '#6b7280';
-        ctx.font = '28px Inter, sans-serif';
-        ctx.fillText('Escanea para reservar', totalW / 2, padding + headerHeight + qrSize + 48);
+        ctx.font = '34px Inter, sans-serif';
+        ctx.fillText('Escanea para reservar', totalW / 2, padding + headerHeight + qrSize + 64);
 
         // Download
         const link = document.createElement('a');
