@@ -63,6 +63,16 @@ function formatTimeLabel(time24: string): string {
   return `${hour12}:${mins} ${suffix}`;
 }
 
+function formatPrice(value: unknown): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "No especificado";
+  return new Intl.NumberFormat("es-CR", {
+    style: "currency",
+    currency: "CRC",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 function buildModel(payload: any, profile: any) {
   const clientEmail = clean(payload?.client?.email, 254).toLowerCase();
   const clientName = clean(payload?.client?.name, 120) || "Cliente";
@@ -83,6 +93,23 @@ function buildModel(payload: any, profile: any) {
   const time24 = clean(payload?.appointment?.time, 10);
   const duration = Number(payload?.appointment?.durationMinutes);
   const durationLabel = Number.isFinite(duration) && duration > 0 ? `${Math.round(duration)} min` : "No especificada";
+  const price = Number(payload?.appointment?.price);
+  const priceLabel = formatPrice(price);
+  const prepaymentRequired = !!payload?.appointment?.prepaymentRequired;
+  const rawPrepaymentRate = Number(payload?.appointment?.prepaymentRate);
+  const prepaymentRate = Number.isFinite(rawPrepaymentRate) && rawPrepaymentRate > 0 ? rawPrepaymentRate : 0.4;
+  const prepaymentPercentLabel = `${Math.round(prepaymentRate * 100)}%`;
+  const rawPrepaymentAmount = Number(payload?.appointment?.prepaymentAmount);
+  const prepaymentAmount = Number.isFinite(rawPrepaymentAmount) && rawPrepaymentAmount > 0
+    ? rawPrepaymentAmount
+    : (Number.isFinite(price) && price > 0 ? Math.round(price * prepaymentRate) : 0);
+  const prepaymentAmountLabel = prepaymentAmount > 0 ? formatPrice(prepaymentAmount) : "";
+  const prepaymentPhone = clean(payload?.appointment?.prepaymentPhone, 40)
+    || clean(payload?.appointment?.prepaymentReceiptPhone, 40);
+  const prepaymentStatusRaw = clean(payload?.appointment?.prepaymentStatus, 30).toLowerCase();
+  const prepaymentStatus = !prepaymentRequired
+    ? ""
+    : (prepaymentStatusRaw === "received" ? "Recibido" : "Pendiente");
   const notes = clean(payload?.appointment?.notes, 1500);
 
   const dateLabel = formatDateLabel(dateIso);
@@ -108,6 +135,12 @@ function buildModel(payload: any, profile: any) {
     dateLabel,
     timeLabel,
     durationLabel,
+    priceLabel,
+    prepaymentRequired,
+    prepaymentPercentLabel,
+    prepaymentAmountLabel,
+    prepaymentPhone,
+    prepaymentStatus,
     notes,
     toEmails: Array.from(toEmails),
   };
@@ -124,6 +157,18 @@ function buildHtml(model: ReturnType<typeof buildModel>): string {
     ["Profesional", model.employeeName],
     ["Duración", model.durationLabel],
   ];
+
+  detailsRows.push(["Monto estimado", model.priceLabel]);
+  if (model.prepaymentRequired) {
+    detailsRows.push(
+      ["Adelanto requerido", model.prepaymentAmountLabel || model.prepaymentPercentLabel],
+      ["Porcentaje de adelanto", model.prepaymentPercentLabel],
+      ["Estado de adelanto", model.prepaymentStatus || "Pendiente"],
+    );
+    if (model.prepaymentPhone) {
+      detailsRows.push(["SINPE / WhatsApp", model.prepaymentPhone]);
+    }
+  }
 
   const detailHtml = detailsRows
     .filter(([_, value]) => value)
@@ -143,6 +188,15 @@ function buildHtml(model: ReturnType<typeof buildModel>): string {
          <p style="margin:0;color:#111827;font-size:14px;line-height:1.6;word-wrap:break-word;">
            <strong style="display:block;margin-bottom:4px;color:#374151">Notas del cliente:</strong> 
            ${escapeHtml(model.notes)}
+         </p>
+       </div>`
+    : "";
+
+  const prepaymentHtml = model.prepaymentRequired
+    ? `<div style="margin-top:16px;background:#fffbeb;padding:14px;border-radius:8px;border:1px solid #facc15;">
+         <p style="margin:0;color:#854d0e;font-size:14px;line-height:1.6;word-wrap:break-word;">
+           <strong style="display:block;margin-bottom:4px;color:#713f12">Adelanto requerido para confirmar:</strong>
+           Solicita y valida ${escapeHtml(model.prepaymentAmountLabel || model.prepaymentPercentLabel)} por SINPE Movil${model.prepaymentPhone ? ` al ${escapeHtml(model.prepaymentPhone)}` : ""} antes de confirmar la cita.
          </p>
        </div>`
     : "";
@@ -202,6 +256,7 @@ function buildHtml(model: ReturnType<typeof buildModel>): string {
             </table>
           </div>
           ${notesHtml}
+          ${prepaymentHtml}
         </td>
       </tr>
       <tr>
@@ -232,9 +287,15 @@ function buildText(model: ReturnType<typeof buildModel>): string {
     `Servicio: ${model.serviceName}`,
     `Profesional: ${model.employeeName}`,
     `Duracion: ${model.durationLabel}`,
+    `Monto estimado: ${model.priceLabel}`,
+    model.prepaymentRequired ? `Adelanto requerido (${model.prepaymentPercentLabel}): ${model.prepaymentAmountLabel || model.prepaymentPercentLabel}` : "",
+    model.prepaymentRequired ? `Estado de adelanto: ${model.prepaymentStatus || "Pendiente"}` : "",
+    model.prepaymentRequired ? `SINPE / WhatsApp para comprobante: ${model.prepaymentPhone || "No especificado"}` : "",
     model.notes ? `Notas: ${model.notes}` : "",
     "",
-    "Por favor, revisa tu aplicacion para gestionar y confirmar la cita.",
+    model.prepaymentRequired
+      ? "Confirma la cita solo despues de validar el comprobante de adelanto."
+      : "Por favor, revisa tu aplicacion para gestionar y confirmar la cita.",
   ].filter(Boolean);
 
   return lines.join("\n");
@@ -350,4 +411,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-

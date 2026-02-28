@@ -83,9 +83,17 @@ App.dashboard = {
                 <td data-label="Servicio">${a.serviceName || '-'}</td>
                 <td data-label="Profesional">${a.employeeName || '-'}</td>
                 <td data-label="Precio">${App.formatCurrency(a.price)}</td>
-                <td data-label="Estado"><span class="badge badge-${a.status}">${this.statusLabel(a.status)}</span></td>
+                <td data-label="Estado"><span class="badge badge-${a.status}">${App.appointments && typeof App.appointments.getAppointmentStatusLabel === 'function' ? App.appointments.getAppointmentStatusLabel(a) : this.statusLabel(a.status)}</span></td>
                 <td data-label="Acciones">
                     <button class="action-btn edit ripple-btn" title="Editar" onclick="App.appointments.showEdit('${a.id}')"><i class="fas fa-edit"></i></button>
+                    ${a.status === 'pending'
+                        && App.appointments
+                        && typeof App.appointments.requiresPrepayment === 'function'
+                        && App.appointments.requiresPrepayment(a)
+                        && typeof App.appointments.isPrepaymentReceived === 'function'
+                        && !App.appointments.isPrepaymentReceived(a)
+                        ? `<button class="action-btn view ripple-btn" title="Marcar adelanto recibido" onclick="App.appointments.markPrepaymentReceived('${a.id}')"><i class="fas fa-money-check-alt"></i></button>`
+                        : ''}
                     ${a.status === 'pending' ? `<button class="action-btn view ripple-btn" title="Confirmar" onclick="App.appointments.confirm('${a.id}')"><i class="fas fa-check"></i></button>` : ''}
                     ${a.status !== 'completed' && a.status !== 'cancelled' ? `<button class="action-btn ripple-btn" title="Completar" onclick="App.appointments.complete('${a.id}')"><i class="fas fa-check-double"></i></button>` : ''}
                     <button class="action-btn delete ripple-btn" title="Cancelar" onclick="App.appointments.cancel('${a.id}')"><i class="fas fa-times"></i></button>

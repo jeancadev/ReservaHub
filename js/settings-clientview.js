@@ -695,7 +695,7 @@ App.clientView = {
                 <td data-label="Servicio">${a.serviceName || '-'}</td>
                 <td data-label="Profesional">${a.employeeName || '-'}</td>
                 <td data-label="Negocio">${a._business || '-'}</td>
-                <td data-label="Estado"><span class="badge badge-${a.status}">${App.dashboard.statusLabel(a.status)}</span></td>
+                <td data-label="Estado"><span class="badge badge-${a.status}">${App.appointments && typeof App.appointments.getAppointmentStatusLabel === 'function' ? App.appointments.getAppointmentStatusLabel(a) : App.dashboard.statusLabel(a.status)}</span></td>
             </tr>
         `).join('');
     },
@@ -1086,6 +1086,20 @@ App.clientView = {
         const biz = App.store.getList('users').find(x => x.id === bd.bizId);
         const cfg = App.getCategoryConfig(biz || App.currentUser);
         const bizAddress = (biz && biz.address) || bd.bizAddress || '';
+        const prepaymentRate = App.appointments && typeof App.appointments.getPrepaymentRate === 'function'
+            ? App.appointments.getPrepaymentRate()
+            : 0.4;
+        const prepaymentPercent = Math.round(prepaymentRate * 100);
+        const totalPrice = Number(bd.servicePrice) || 0;
+        const prepaymentAmount = Math.round(totalPrice * prepaymentRate);
+        const prepaymentPhone = App.appointments && typeof App.appointments.getPrepaymentPhone === 'function'
+            ? App.appointments.getPrepaymentPhone()
+            : '6454-2137';
+        const whatsappText = `Hola, adjunto comprobante del adelanto de mi cita para ${bd.serviceName || 'el servicio'} el ${bd.date || ''} a las ${bd.time || ''}.`;
+        const whatsappLink = App.appointments && typeof App.appointments.getPrepaymentWhatsAppLink === 'function'
+            ? App.appointments.getPrepaymentWhatsAppLink(whatsappText)
+            : '';
+
         let html = '<h3 class="booking-section-title">Confirma tu reserva</h3>';
         html += '<div class="booking-summary-card">';
         html += `<div class="summary-row"><span><i class="fas ${cfg.businessIcon}"></i> Negocio</span><span>${bd.bizName || '-'}</span></div>`;
@@ -1095,7 +1109,13 @@ App.clientView = {
         html += `<div class="summary-row"><span><i class="fas fa-calendar"></i> Fecha</span><span>${bd.date ? App.formatDate(bd.date) : '-'}</span></div>`;
         html += `<div class="summary-row"><span><i class="fas fa-clock"></i> Hora</span><span>${bd.time ? App.formatTime(bd.time) : '-'}</span></div>`;
         html += `<div class="summary-row total"><span><i class="fas fa-tag"></i> Total</span><span>${App.formatCurrency(bd.servicePrice)}</span></div>`;
+        html += `<div class="summary-row"><span><i class="fas fa-money-bill-wave"></i> Adelanto (${prepaymentPercent}%)</span><span>${App.formatCurrency(prepaymentAmount)}</span></div>`;
         html += '</div>';
+        html += `<div style="margin-top:16px;background:#fffbeb;border:1px solid #facc15;border-radius:10px;padding:14px">
+            <p style="margin:0 0 8px;color:#854d0e;font-weight:600"><i class="fas fa-shield-alt"></i> Reserva sujeta a adelanto</p>
+            <p style="margin:0 0 8px;color:#854d0e;font-size:0.92rem">Para asegurar tu espacio debes pagar ${App.formatCurrency(prepaymentAmount)} (${prepaymentPercent}% del servicio) por SINPE Movil al ${prepaymentPhone} y enviar el comprobante por WhatsApp. El negocio confirmara tu cita cuando valide ese comprobante.</p>
+            ${whatsappLink ? `<a href="${whatsappLink}" target="_blank" rel="noopener" class="btn btn-sm btn-outline"><i class="fab fa-whatsapp"></i> Enviar comprobante por WhatsApp</a>` : ''}
+        </div>`;
 
         // Notes field
         html += `<div class="input-group" style="margin-top:16px">
@@ -1162,6 +1182,14 @@ App.clientView = {
         if (bd.empId && assignment.id !== bd.empId) {
             App.toast.show(`Te asignamos con ${assignment.name} para esa hora.`, 'info');
         }
+        const prepaymentRate = App.appointments && typeof App.appointments.getPrepaymentRate === 'function'
+            ? App.appointments.getPrepaymentRate()
+            : 0.4;
+        const prepaymentPercent = Math.round(prepaymentRate * 100);
+        const prepaymentAmount = Math.round((Number(bd.servicePrice) || 0) * prepaymentRate);
+        const prepaymentPhone = App.appointments && typeof App.appointments.getPrepaymentPhone === 'function'
+            ? App.appointments.getPrepaymentPhone()
+            : '6454-2137';
 
         // Auto-register client in the business's client list
         const clientsKey = bd.bizId + '_clients';
@@ -1196,7 +1224,16 @@ App.clientView = {
             price: bd.servicePrice,
             status: 'pending',
             notes: notes,
-            source: 'client-app'
+            source: 'client-app',
+            prepaymentRequired: true,
+            prepaymentRate: prepaymentRate,
+            prepaymentAmount: prepaymentAmount,
+            prepaymentStatus: 'pending',
+            prepaymentRequestedAt: new Date().toISOString(),
+            prepaymentMethod: 'SINPE_MOVIL',
+            prepaymentPhone: prepaymentPhone,
+            prepaymentReceiptChannel: 'whatsapp',
+            prepaymentReceiptPhone: prepaymentPhone
         };
         const savedAppt = App.store.addToList(bd.bizId + '_appointments', appointmentObj);
 
@@ -1224,7 +1261,13 @@ App.clientView = {
             }).catch(console.error); // Async fire-and-forget
         }
 
-        App.toast.show('¡Reserva confirmada! El negocio será notificado.', 'success');
+        const prepaymentLabel = prepaymentAmount > 0
+            ? App.formatCurrency(prepaymentAmount)
+            : `${prepaymentPercent}% del servicio`;
+        App.toast.show(
+            `Reserva creada. Envia el adelanto de ${prepaymentLabel} por SINPE al ${prepaymentPhone} y manda el comprobante por WhatsApp para confirmar tu cita.`,
+            'warning'
+        );
 
         // Reset booking
         App.clientBookingStep = 1;

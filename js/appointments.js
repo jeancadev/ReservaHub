@@ -3,6 +3,9 @@
    ============================================ */
 
 App.appointments = {
+    PREPAYMENT_RATE: 0.4,
+    PREPAYMENT_SINPE_PHONE: '6454-2137',
+
     showCreate(prefill = {}) {
         this._openForm('Nueva Cita', {
             clientId: '',
@@ -333,8 +336,25 @@ App.appointments = {
             source: editId ? 'manual-edit' : 'manual'
         };
 
+        const currentAppt = editId
+            ? App.store.getList(App.getBusinessKey('appointments')).find(a => a.id === editId)
+            : null;
+        const apptForValidation = Object.assign({}, currentAppt || {}, payload);
+        if (status === 'confirmed' && this.requiresPrepayment(apptForValidation) && !this.isPrepaymentReceived(apptForValidation)) {
+            const requiredAmount = this.getPrepaymentAmount(apptForValidation);
+            const ratePercent = Math.round(this.getPrepaymentRate() * 100);
+            const amountLabel = requiredAmount > 0
+                ? App.formatCurrency(requiredAmount)
+                : `${ratePercent}% del servicio`;
+            App.toast.show(
+                `No puedes confirmar sin adelanto. Solicita ${amountLabel} por SINPE al ${this.getPrepaymentPhone()} y marca el comprobante recibido.`,
+                'warning'
+            );
+            return false;
+        }
+
         if (editId) {
-            const prev = App.store.getList(App.getBusinessKey('appointments')).find(a => a.id === editId);
+            const prev = currentAppt;
             const updated = App.store.updateInList(App.getBusinessKey('appointments'), editId, payload)
                 || Object.assign({}, prev || {}, payload, { id: editId });
             if (prev && prev.status !== 'completed' && payload.status === 'completed') this._markClientVisit(client.id, payload.date);
@@ -360,6 +380,13 @@ App.appointments = {
     openDetails(id) {
         const appt = App.store.getList(App.getBusinessKey('appointments')).find(a => a.id === id);
         if (!appt) return;
+        const needsPrepayment = this.requiresPrepayment(appt);
+        const prepaymentReceived = this.isPrepaymentReceived(appt);
+        const prepaymentAmount = this.getPrepaymentAmount(appt);
+        const prepaymentPercent = Math.round(this.getPrepaymentRate() * 100);
+        const prepaymentAmountLabel = prepaymentAmount > 0
+            ? App.formatCurrency(prepaymentAmount)
+            : `${prepaymentPercent}% del servicio`;
 
         const body = `
             <div style="display:grid;gap:10px">
@@ -367,11 +394,15 @@ App.appointments = {
                 <div><strong>Servicio:</strong> ${appt.serviceName || '-'}</div>
                 <div><strong>Profesional:</strong> ${appt.employeeName || '-'}</div>
                 <div><strong>Fecha:</strong> ${App.formatDate(appt.date)} ${App.formatTime(appt.time)}</div>
-                <div><strong>Estado:</strong> ${this.statusLabel(appt.status)}</div>
+                <div><strong>Estado:</strong> ${this.getAppointmentStatusLabel(appt)}</div>
                 <div><strong>Total:</strong> ${App.formatCurrency(appt.price)}</div>
+                ${needsPrepayment ? `<div><strong>Adelanto requerido (${prepaymentPercent}%):</strong> ${prepaymentAmountLabel}</div>` : ''}
+                ${needsPrepayment ? `<div><strong>Estado adelanto:</strong> ${prepaymentReceived ? 'Recibido' : 'Pendiente'}</div>` : ''}
+                ${needsPrepayment && !prepaymentReceived ? `<div><strong>Enviar comprobante por WhatsApp:</strong> ${this.getPrepaymentPhone()}</div>` : ''}
                 ${appt.notes ? `<div><strong>Notas:</strong> ${appt.notes}</div>` : ''}
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
                     <button class="btn btn-outline ripple-btn" onclick="App.appointments.showEdit('${appt.id}')"><i class="fas fa-edit"></i> Editar</button>
+                    ${appt.status === 'pending' && needsPrepayment && !prepaymentReceived ? `<button class="btn btn-outline ripple-btn" onclick="App.appointments.markPrepaymentReceived('${appt.id}')"><i class="fas fa-money-check-alt"></i> Marcar adelanto recibido</button>` : ''}
                     ${appt.status === 'pending' ? `<button class="btn btn-outline ripple-btn" onclick="App.appointments.confirm('${appt.id}')"><i class="fas fa-check"></i> Confirmar</button>` : ''}
                     ${appt.status !== 'completed' && appt.status !== 'cancelled' ? `<button class="btn btn-outline ripple-btn" onclick="App.appointments.complete('${appt.id}')"><i class="fas fa-check-double"></i> Completar</button>` : ''}
                     <button class="btn btn-danger ripple-btn" onclick="App.appointments.cancel('${appt.id}')"><i class="fas fa-times"></i> Cancelar</button>
@@ -383,11 +414,24 @@ App.appointments = {
         App.ui.initRipple();
     },
 
-    async confirm(id) {
+    async confirm(id, options = {}) {
         const key = App.getBusinessKey('appointments');
         const prev = App.store.getList(key).find(a => a.id === id);
         if (!prev) {
             App.toast.show('No se encontro la cita', 'error');
+            return;
+        }
+        const skipPrepaymentCheck = !!(options && options.skipPrepaymentCheck);
+        if (!skipPrepaymentCheck && this.requiresPrepayment(prev) && !this.isPrepaymentReceived(prev)) {
+            const requiredAmount = this.getPrepaymentAmount(prev);
+            const ratePercent = Math.round(this.getPrepaymentRate() * 100);
+            const amountLabel = requiredAmount > 0
+                ? App.formatCurrency(requiredAmount)
+                : `${ratePercent}% del servicio`;
+            App.toast.show(
+                `No puedes confirmar sin adelanto. Solicita ${amountLabel} por SINPE al ${this.getPrepaymentPhone()} y marca el comprobante recibido.`,
+                'warning'
+            );
             return;
         }
 
@@ -401,6 +445,34 @@ App.appointments = {
         if (prev.status !== 'confirmed') {
             await this._notifyAppointmentConfirmed(updated);
         }
+    },
+
+    markPrepaymentReceived(id) {
+        const key = App.getBusinessKey('appointments');
+        const appt = App.store.getList(key).find(a => a.id === id);
+        if (!appt) {
+            App.toast.show('No se encontro la cita', 'error');
+            return;
+        }
+        if (!this.requiresPrepayment(appt)) {
+            App.toast.show('Esta cita no requiere adelanto.', 'info');
+            return;
+        }
+        if (this.isPrepaymentReceived(appt)) {
+            App.toast.show('El adelanto ya estaba marcado como recibido.', 'info');
+            return;
+        }
+
+        App.store.updateInList(key, id, {
+            prepaymentStatus: 'received',
+            prepaymentReceivedAt: new Date().toISOString(),
+            prepaymentReceiptChannel: 'whatsapp',
+            prepaymentReceiptPhone: this.getPrepaymentPhone()
+        });
+
+        App.toast.show('Adelanto marcado como recibido. Ya puedes confirmar la cita.', 'success');
+        App.modal.close();
+        this._refreshViews();
     },
 
     complete(id) {
@@ -430,6 +502,54 @@ App.appointments = {
             cancelled: 'Cancelada'
         };
         return labels[status] || status;
+    },
+
+    getPrepaymentRate() {
+        const parsed = Number(this.PREPAYMENT_RATE);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.4;
+    },
+
+    getPrepaymentPhone() {
+        return String(this.PREPAYMENT_SINPE_PHONE || '6454-2137').trim();
+    },
+
+    getPrepaymentWhatsAppLink(message = '') {
+        let digits = this.getPrepaymentPhone().replace(/\D/g, '');
+        if (digits.length === 8) digits = `506${digits}`;
+        if (!digits) return '';
+        const text = String(message || '').trim();
+        if (!text) return `https://wa.me/${digits}`;
+        return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+    },
+
+    requiresPrepayment(appt) {
+        if (!appt || typeof appt !== 'object') return false;
+        if (appt.prepaymentRequired === true) return true;
+        if (appt.prepaymentRequired === false) return false;
+        return String(appt.source || '') === 'client-app';
+    },
+
+    isPrepaymentReceived(appt) {
+        if (!this.requiresPrepayment(appt)) return true;
+        const status = String(appt && appt.prepaymentStatus ? appt.prepaymentStatus : '').toLowerCase();
+        if (status === 'received') return true;
+        return !!(appt && appt.prepaymentReceivedAt);
+    },
+
+    getPrepaymentAmount(appt) {
+        const explicit = Number(appt && appt.prepaymentAmount);
+        if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
+        const total = Number(appt && appt.price);
+        if (!Number.isFinite(total) || total <= 0) return 0;
+        return Math.round(total * this.getPrepaymentRate());
+    },
+
+    getAppointmentStatusLabel(appt) {
+        if (!appt || typeof appt !== 'object') return this.statusLabel('pending');
+        if (appt.status === 'pending' && this.requiresPrepayment(appt) && !this.isPrepaymentReceived(appt)) {
+            return 'Pendiente de adelanto';
+        }
+        return this.statusLabel(appt.status);
     },
 
     async _notifyAppointmentConfirmed(appt) {

@@ -537,8 +537,26 @@ const App = {
         return bizId + '_' + suffix;
     },
     formatDate(d) {
-        const date = new Date(d);
-        return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        if (d === null || d === undefined || d === '') return '';
+        const raw = String(d).trim();
+        const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+
+        // Date-only values (YYYY-MM-DD) represent booking day, not a UTC timestamp.
+        // Build a local date at midday to avoid timezone shifts (off-by-one day).
+        let date = null;
+        if (ymd) {
+            const year = Number(ymd[1]);
+            const month = Number(ymd[2]) - 1;
+            const day = Number(ymd[3]);
+            date = new Date(year, month, day, 12, 0, 0, 0);
+        } else if (d instanceof Date) {
+            date = d;
+        } else {
+            date = new Date(raw);
+        }
+
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return raw;
+        return date.toLocaleDateString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric' });
     },
     // Convert 24h "HH:MM" to 12h "h:MM AM/PM"
     formatTime(t) {

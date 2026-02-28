@@ -93,6 +93,12 @@ App.notifications = {
                 employeeName: this._safeString(appointment && appointment.employeeName ? appointment.employeeName : 'Por asignar', 120),
                 durationMinutes: this._toNumber(appointment && appointment.duration ? appointment.duration : 0, 0),
                 price: this._toNumber(appointment && appointment.price ? appointment.price : 0, 0),
+                prepaymentRequired: !!(appointment && appointment.prepaymentRequired),
+                prepaymentRate: this._toNumber(appointment && appointment.prepaymentRate ? appointment.prepaymentRate : 0, 0),
+                prepaymentAmount: this._toNumber(appointment && appointment.prepaymentAmount ? appointment.prepaymentAmount : 0, 0),
+                prepaymentStatus: this._safeString(appointment && appointment.prepaymentStatus ? appointment.prepaymentStatus : '', 30),
+                prepaymentPhone: this._safeString(appointment && appointment.prepaymentPhone ? appointment.prepaymentPhone : '', 40),
+                prepaymentReceiptPhone: this._safeString(appointment && appointment.prepaymentReceiptPhone ? appointment.prepaymentReceiptPhone : '', 40),
                 notes: this._safeString(appointment && appointment.notes ? appointment.notes : '', 1500),
                 status: this._safeString(appointment && appointment.status ? appointment.status : '', 30)
             },
