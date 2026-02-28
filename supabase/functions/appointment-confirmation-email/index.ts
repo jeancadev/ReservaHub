@@ -112,7 +112,23 @@ function buildModel(payload: any, profile: any) {
 
   const dateLabel = formatDateLabel(dateIso);
   const timeLabel = formatTimeLabel(time24);
-  const priceLabel = formatPrice(payload?.appointment?.price);
+  const totalAmount = Number(payload?.appointment?.price);
+  const priceLabel = formatPrice(totalAmount);
+  const prepaymentRequired = !!payload?.appointment?.prepaymentRequired;
+  const rawPrepaymentRate = Number(payload?.appointment?.prepaymentRate);
+  const prepaymentRate = Number.isFinite(rawPrepaymentRate) && rawPrepaymentRate > 0 ? rawPrepaymentRate : 0.4;
+  const rawPrepaymentAmount = Number(payload?.appointment?.prepaymentAmount);
+  const prepaymentAmount = Number.isFinite(rawPrepaymentAmount) && rawPrepaymentAmount > 0
+    ? rawPrepaymentAmount
+    : (prepaymentRequired && Number.isFinite(totalAmount) && totalAmount > 0
+      ? Math.round(totalAmount * prepaymentRate)
+      : 0);
+  const shouldShowPrepayment = prepaymentRequired || prepaymentAmount > 0;
+  const balanceAmount = Number.isFinite(totalAmount)
+    ? Math.max(Number(totalAmount) - Number(prepaymentAmount || 0), 0)
+    : NaN;
+  const prepaymentLabel = shouldShowPrepayment ? formatPrice(prepaymentAmount) : "";
+  const balanceLabel = shouldShowPrepayment ? formatPrice(balanceAmount) : "";
 
   const subject = `Cita confirmada en ${businessName} - ${dateLabel} ${timeLabel}`.trim();
 
@@ -132,6 +148,9 @@ function buildModel(payload: any, profile: any) {
     timeLabel,
     durationLabel,
     priceLabel,
+    prepaymentLabel,
+    balanceLabel,
+    shouldShowPrepayment,
     notes,
     mapUrl,
   };
@@ -150,6 +169,8 @@ function buildText(model: ReturnType<typeof buildModel>): string {
     `Profesional asignado: ${model.employeeName}`,
     `Duracion estimada: ${model.durationLabel}`,
     `Monto estimado: ${model.priceLabel}`,
+    model.shouldShowPrepayment ? `Abono realizado: ${model.prepaymentLabel}` : "",
+    model.shouldShowPrepayment ? `Saldo final por pagar: ${model.balanceLabel}` : "",
     `Ubicacion: ${model.businessAddress || "No especificada"}`,
     model.notes ? `Notas de tu reserva: ${model.notes}` : "",
     "",
@@ -177,6 +198,10 @@ function buildHtml(model: ReturnType<typeof buildModel>): string {
     ["Profesional asignado", model.employeeName],
     ["Duracion estimada", model.durationLabel],
     ["Monto estimado", model.priceLabel],
+    ...(model.shouldShowPrepayment ? [
+      ["Abono realizado", model.prepaymentLabel],
+      ["Saldo final por pagar", model.balanceLabel],
+    ] : []),
     ["Ubicacion", model.businessAddress || "No especificada"],
   ];
 
