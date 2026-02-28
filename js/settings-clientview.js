@@ -70,6 +70,11 @@ App.settings = {
         }
         this.updateBusinessPhotoPreview();
         this.renderSchedule();
+
+        // Generate QR code for sharing business
+        if (App.qrShare && typeof App.qrShare.generate === 'function') {
+            App.qrShare.generate();
+        }
     },
 
     _toggleRoleLayout(isClient) {

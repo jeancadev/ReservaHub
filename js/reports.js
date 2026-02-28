@@ -5,6 +5,55 @@
 App.reports = {
     _periodPopulated: false,
 
+    _dateKey(date) {
+        const d = date instanceof Date ? date : new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    },
+
+    _getSelectedDayKey() {
+        const input = document.getElementById('report-day');
+        const todayKey = this._dateKey(App.getCRDate());
+        if (!input) return todayKey;
+
+        const value = String(input.value || '').trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+        input.value = todayKey;
+        return todayKey;
+    },
+
+    _updateDailyRevenueLabel(dayKey) {
+        const labelEl = document.getElementById('report-daily-revenue-label');
+        if (!labelEl) return;
+
+        const todayKey = this._dateKey(App.getCRDate());
+        if (dayKey === todayKey) {
+            labelEl.textContent = 'Ingresos de Hoy';
+            return;
+        }
+
+        labelEl.textContent = `Ingresos ${App.formatDate(dayKey)}`;
+    },
+
+    _updateRevenueChartTitle(dayKey) {
+        const titleEl = document.getElementById('report-revenue-chart-title');
+        if (!titleEl) return;
+        titleEl.textContent = `Ingresos por Hora ${App.formatDate(dayKey)}`;
+    },
+
+    _getCompletedAppointmentsByDay(dayKey) {
+        const appts = App.store.getList(App.getBusinessKey('appointments'));
+        return appts.filter(appt => appt.status === 'completed' && String(appt.date || '').slice(0, 10) === dayKey);
+    },
+
+    getDailyRevenue(dayKey) {
+        const completed = this._getCompletedAppointmentsByDay(dayKey);
+        return completed.reduce((sum, appt) => sum + (Number(appt.price) || 0), 0);
+    },
+
     // Dynamically populate the period selector with previous months
     populatePeriodSelect() {
         const select = document.getElementById('report-period');
@@ -67,10 +116,12 @@ App.reports = {
 
         const { filtered, period } = this.getFilteredAppointments();
         const now = new Date();
+        const selectedDayKey = this._getSelectedDayKey();
 
         const total = filtered.filter(a => a.status !== 'cancelled').length;
         const completed = filtered.filter(a => a.status === 'completed');
         const revenue = completed.reduce((s, a) => s + (Number(a.price) || 0), 0);
+        const dailyRevenue = this.getDailyRevenue(selectedDayKey);
         const cancelled = filtered.filter(a => a.status === 'cancelled').length;
         const cancelRate = filtered.length > 0 ? Math.round((cancelled / filtered.length) * 100) : 0;
         const clients = App.store.getList(App.getBusinessKey('clients'));
@@ -88,10 +139,14 @@ App.reports = {
 
         document.getElementById('report-total-appts').textContent = total;
         document.getElementById('report-revenue').textContent = App.formatCurrency(revenue);
+        const dailyRevenueEl = document.getElementById('report-daily-revenue');
+        if (dailyRevenueEl) dailyRevenueEl.textContent = App.formatCurrency(dailyRevenue);
+        this._updateDailyRevenueLabel(selectedDayKey);
+        this._updateRevenueChartTitle(selectedDayKey);
         document.getElementById('report-cancel-rate').textContent = cancelRate + '%';
         document.getElementById('report-new-clients').textContent = newClients;
 
-        this.renderRevenueChart(filtered);
+        this.renderRevenueChart(this._getCompletedAppointmentsByDay(selectedDayKey));
         this.renderServicesChart(filtered);
         this.renderOccupancyChart(filtered);
     },
@@ -99,15 +154,43 @@ App.reports = {
     renderRevenueChart(appts) {
         const ctx = document.getElementById('revenue-chart');
         if (!ctx) return;
-        const completed = appts.filter(a => a.status === 'completed');
-        const days = {};
-        completed.forEach(a => { days[a.date] = (days[a.date] || 0) + (Number(a.price) || 0); });
-        const labels = Object.keys(days).sort();
-        const data = labels.map(l => days[l]);
+        const hours = {};
+        appts.forEach(a => {
+            const time = String(a.time || '').trim();
+            const hourKey = /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+                ? `${time.slice(0, 2)}:00`
+                : 'Sin hora';
+            hours[hourKey] = (hours[hourKey] || 0) + (Number(a.price) || 0);
+        });
+
+        let labels = Object.keys(hours).sort();
+        let data = labels.map(l => hours[l]);
+        if (!labels.length) {
+            labels = ['Sin datos'];
+            data = [0];
+        }
+
+        const prettyLabels = labels.map(label => {
+            if (label === 'Sin hora' || label === 'Sin datos') return label;
+            return App.formatTime(label);
+        });
+
         if (App.revenueChart) App.revenueChart.destroy();
         App.revenueChart = new Chart(ctx, {
             type: 'line',
-            data: { labels: labels.map(l => l.slice(5)), datasets: [{ label: 'Ingresos', data, fill: true, backgroundColor: 'rgba(67,97,238,0.1)', borderColor: '#4361ee', tension: 0.4, pointRadius: 4, pointBackgroundColor: '#4361ee' }] },
+            data: {
+                labels: prettyLabels,
+                datasets: [{
+                    label: 'Ingresos por hora',
+                    data,
+                    fill: true,
+                    backgroundColor: 'rgba(67,97,238,0.1)',
+                    borderColor: '#4361ee',
+                    tension: 0.35,
+                    pointRadius: labels[0] === 'Sin datos' ? 0 : 4,
+                    pointBackgroundColor: '#4361ee'
+                }]
+            },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }, animation: { duration: 1000, easing: 'easeOutQuart' } }
         });
     },

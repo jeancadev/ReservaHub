@@ -2919,6 +2919,10 @@ input::-ms-clear {
     margin-bottom: 24px;
 }
 
+#section-reports .report-day-input {
+    min-width: 170px;
+}
+
 #section-reports .dashboard-bottom-grid {
     margin-top: 0;
     margin-bottom: 24px;
@@ -4073,6 +4077,11 @@ input::-ms-clear {
     .calendar-controls .btn,
     .header-actions .btn,
     .header-actions .search-box {
+        width: 100%;
+    }
+
+    #section-reports .header-actions .select-input,
+    #section-reports .header-actions .report-day-input {
         width: 100%;
     }
 
@@ -6520,5 +6529,167 @@ select.premium-select-source {
         min-width: 38px;
         min-height: 38px;
         font-size: 1rem;
+    }
+}
+
+/* ============================================
+   QR SHARE CARD
+   ============================================ */
+.qr-share-card .card-header h3 i {
+    color: var(--primary);
+}
+
+.qr-share-desc {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.qr-share-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.qr-code-box {
+    background: #fff;
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-md);
+    border: 2px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    transition: box-shadow var(--transition-base), border-color var(--transition-base);
+}
+
+.qr-code-box:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-light);
+}
+
+.qr-code-box canvas,
+.qr-code-box img {
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: var(--radius-sm);
+}
+
+.qr-share-url {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    word-break: break-all;
+    text-align: center;
+    width: min(100%, 320px);
+    max-width: 320px;
+    padding: 8px 14px;
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-family: 'Inter', monospace;
+}
+
+.qr-share-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.qr-btn-download {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: #fff !important;
+    border: none;
+    padding: 10px 20px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+}
+
+.qr-btn-download:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(67, 97, 238, 0.4);
+}
+
+.qr-btn-whatsapp {
+    background: linear-gradient(135deg, #25d366, #128c48);
+    color: #fff !important;
+    border: none;
+    padding: 10px 20px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+}
+
+.qr-btn-whatsapp:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+}
+
+.qr-btn-copy {
+    background: transparent;
+    color: var(--text-primary) !important;
+    border: 2px solid var(--border);
+    padding: 10px 20px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-base);
+}
+
+.qr-btn-copy:hover {
+    border-color: var(--primary);
+    color: var(--primary) !important;
+    background: var(--primary-bg);
+    transform: translateY(-2px);
+}
+
+.qr-btn-copy.copied {
+    border-color: var(--accent-green);
+    color: var(--accent-green) !important;
+    background: rgba(45, 198, 83, 0.08);
+}
+
+/* Dark mode adjustments */
+:root[data-theme='dark'] .qr-code-box {
+    background: #fff;
+    border-color: var(--border);
+}
+
+:root[data-theme='dark'] .qr-btn-download {
+    box-shadow: 0 4px 12px rgba(122, 162, 255, 0.25);
+}
+
+:root[data-theme='dark'] .qr-btn-whatsapp {
+    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.2);
+}
+
+/* Mobile responsive */
+@media (max-width: 860px) {
+    .qr-share-actions {
+        flex-direction: column;
+    }
+
+    .qr-share-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .qr-code-box {
+        padding: 16px;
     }
 }

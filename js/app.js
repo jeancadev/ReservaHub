@@ -784,6 +784,157 @@ App.phone = {
     }
 };
 
+// ---- QR SHARE ----
+App.qrShare = {
+    _qr: null,
+    _url: '',
+
+    _getResponsiveSize(container) {
+        const fallback = 200;
+        const preview = container && typeof container.closest === 'function'
+            ? container.closest('.qr-share-preview')
+            : null;
+        const previewWidth = preview ? preview.clientWidth : 0;
+        if (!previewWidth) return fallback;
+
+        const isMobile = window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
+        const boxPadding = isMobile ? 32 : 40;
+        const sizeBySpace = Math.floor(previewWidth - boxPadding);
+
+        return Math.max(140, Math.min(200, sizeBySpace));
+    },
+
+    generate() {
+        const container = document.getElementById('qr-code-container');
+        const urlEl = document.getElementById('qr-share-url');
+        if (!container) return;
+
+        const url = window.location.origin + window.location.pathname;
+        this._url = url;
+
+        // Show URL below QR
+        if (urlEl) urlEl.textContent = url;
+
+        // Clear previous QR
+        container.innerHTML = '';
+        this._qr = null;
+
+        // Check if QRCode library is loaded
+        if (typeof QRCode === 'undefined') {
+            container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No se pudo cargar la librería QR</p>';
+            return;
+        }
+
+        try {
+            const qrSize = this._getResponsiveSize(container);
+            this._qr = new QRCode(container, {
+                text: url,
+                width: qrSize,
+                height: qrSize,
+                colorDark: '#1a1a2e',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        } catch (err) {
+            console.error('QR generation error:', err);
+            container.innerHTML = '<p style="color:var(--accent-red);font-size:0.85rem;">Error al generar el QR</p>';
+        }
+    },
+
+    download() {
+        const container = document.getElementById('qr-code-container');
+        if (!container) return;
+
+        const qrCanvas = container.querySelector('canvas');
+        const qrImg = container.querySelector('img');
+        if (!qrCanvas && !qrImg) {
+            App.toast.show('Primero genera el código QR', 'warning');
+            return;
+        }
+
+        // Build a branded canvas with the QR + business name
+        const u = App.currentUser || {};
+        const businessName = u.businessName || u.name || 'Mi Negocio';
+
+        const padding = 40;
+        const qrSize = 200;
+        const headerHeight = 50;
+        const footerHeight = 35;
+        const totalW = qrSize + padding * 2;
+        const totalH = headerHeight + qrSize + footerHeight + padding * 2;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = totalW;
+        canvas.height = totalH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { App.toast.show('No se pudo crear la imagen', 'error'); return; }
+
+        // Background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, totalW, totalH);
+
+        // Header (business name)
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = 'bold 16px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(businessName, totalW / 2, padding + 20);
+
+        // Draw QR
+        const qrSource = qrCanvas || qrImg;
+        ctx.drawImage(qrSource, padding, padding + headerHeight, qrSize, qrSize);
+
+        // Footer
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.fillText('Escanea para reservar', totalW / 2, padding + headerHeight + qrSize + 22);
+
+        // Download
+        const link = document.createElement('a');
+        link.download = `qr-${businessName.replace(/\s+/g, '-').toLowerCase()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        App.toast.show('Código QR descargado', 'success');
+    },
+
+    shareWhatsApp() {
+        const u = App.currentUser || {};
+        const businessName = u.businessName || u.name || 'Mi Negocio';
+        const url = this._url || (window.location.origin + window.location.pathname);
+        const message = `¡Hola! 👋 Reserva tu cita en *${businessName}* de forma rápida y sencilla:\n${url}`;
+        const waUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+        window.open(waUrl, '_blank');
+    },
+
+    copyLink() {
+        const url = this._url || (window.location.origin + window.location.pathname);
+        navigator.clipboard.writeText(url).then(() => {
+            App.toast.show('Enlace copiado al portapapeles', 'success');
+            const btn = document.querySelector('.qr-btn-copy');
+            if (btn) {
+                btn.classList.add('copied');
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> ¡Copiado!';
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = originalHTML;
+                }, 2000);
+            }
+        }).catch(() => {
+            // Fallback for older browsers
+            const input = document.createElement('input');
+            input.value = url;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            App.toast.show('Enlace copiado al portapapeles', 'success');
+        });
+    }
+};
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
     App.init().catch(err => console.error('App init error:', err));

@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <link rel="stylesheet" href="css/styles.css?v=20260225b">
     <!-- Favicon: Scissors-Clock -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -578,6 +579,12 @@
                         <option value="month" selected>Este Mes</option>
                         <option value="year">Este Año</option>
                     </select>
+                    <input
+                        type="date"
+                        id="report-day"
+                        class="select-input report-day-input"
+                        onchange="App.reports.render()"
+                        aria-label="Seleccionar día para ingresos diarios">
                     <button class="btn btn-outline ripple-btn" onclick="App.reports.exportExcel()">
                         <i class="fas fa-file-excel"></i> Exportar Excel
                     </button>
@@ -600,6 +607,13 @@
                 </div>
                 <div class="stat-card" data-hover="lift">
                     <div class="stat-info">
+                        <span class="stat-label" id="report-daily-revenue-label">Ingresos del Día</span>
+                        <span class="stat-value" id="report-daily-revenue">$0</span>
+                    </div>
+                    <div class="stat-icon blue"><i class="fas fa-coins"></i></div>
+                </div>
+                <div class="stat-card" data-hover="lift">
+                    <div class="stat-info">
                         <span class="stat-label">Tasa Cancelación</span>
                         <span class="stat-value" id="report-cancel-rate">0%</span>
                     </div>
@@ -616,7 +630,7 @@
             <div class="dashboard-bottom-grid">
                 <div class="card">
                     <div class="card-header">
-                        <h3><i class="fas fa-chart-area"></i> Ingresos</h3>
+                        <h3><i class="fas fa-chart-area"></i> <span id="report-revenue-chart-title">Ingresos del Día</span></h3>
                     </div>
                     <div class="chart-container">
                         <canvas id="revenue-chart"></canvas>
@@ -756,6 +770,29 @@
                         </form>
                     </div>
                 </div>
+                <!-- Share QR Card (business only) -->
+                <div id="settings-share-card" class="card qr-share-card business-only">
+                    <div class="card-header"><h3><i class="fas fa-qrcode"></i> Compartir tu Negocio</h3></div>
+                    <div class="card-body">
+                        <p class="qr-share-desc">Comparte este código QR con tus clientes para que accedan fácilmente a tu sistema de reservas.</p>
+                        <div class="qr-share-preview">
+                            <div id="qr-code-container" class="qr-code-box"></div>
+                            <p class="qr-share-url" id="qr-share-url"></p>
+                        </div>
+                        <div class="qr-share-actions">
+                            <button type="button" class="btn qr-btn-download ripple-btn" onclick="App.qrShare.download()">
+                                <i class="fas fa-download"></i> Descargar QR
+                            </button>
+                            <button type="button" class="btn qr-btn-whatsapp ripple-btn" onclick="App.qrShare.shareWhatsApp()">
+                                <i class="fab fa-whatsapp"></i> WhatsApp
+                            </button>
+                            <button type="button" class="btn qr-btn-copy ripple-btn" onclick="App.qrShare.copyLink()">
+                                <i class="fas fa-copy"></i> Copiar Enlace
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Danger Zone: Delete Account (visible for both roles) -->
                 <div id="settings-danger-zone" class="card danger-zone-card">
                     <div class="card-header"><h3><i class="fas fa-exclamation-triangle"></i> Zona de Peligro</h3></div>
