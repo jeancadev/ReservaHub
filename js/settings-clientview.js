@@ -82,6 +82,7 @@ App.settings = {
         const businessCard = document.getElementById('settings-business-card');
         const scheduleCard = document.getElementById('settings-schedule-card');
         const clientCard = document.getElementById('settings-client-card');
+        const shareCard = document.getElementById('settings-share-card');
 
         if (subtitle) {
             subtitle.textContent = isClient
@@ -90,6 +91,7 @@ App.settings = {
         }
         if (businessCard) businessCard.style.display = isClient ? 'none' : '';
         if (scheduleCard) scheduleCard.style.display = isClient ? 'none' : '';
+        if (shareCard) shareCard.style.display = isClient ? 'none' : '';
         if (clientCard) clientCard.style.display = isClient ? '' : 'none';
     },
 
