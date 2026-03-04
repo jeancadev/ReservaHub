@@ -579,14 +579,34 @@
                         <option value="month" selected>Este Mes</option>
                         <option value="year">Este Año</option>
                     </select>
-                    <div class="report-day-field">
-                        <input
-                            type="date"
-                            id="report-day"
+                    <div class="report-day-field" id="report-day-field">
+                        <input type="hidden" id="report-day" value="">
+                        <button
+                            type="button"
+                            id="report-day-trigger"
                             class="select-input report-day-input"
-                            onchange="App.reports.render()"
-                            aria-label="Seleccionar día para ingresos diarios">
-                        <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                            aria-label="Seleccionar día para ingresos diarios"
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                            onclick="App.reports.toggleDayPicker()">
+                            <span id="report-day-display">Seleccionar fecha</span>
+                            <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                        </button>
+                        <div id="report-day-picker" class="report-day-picker" role="dialog" aria-label="Calendario de reportes" hidden>
+                            <div class="report-day-picker-head">
+                                <button type="button" class="btn-icon" onclick="App.reports.shiftDayPickerMonth(-1)" aria-label="Mes anterior">
+                                    <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                                </button>
+                                <strong id="report-day-picker-title"></strong>
+                                <button type="button" class="btn-icon" onclick="App.reports.shiftDayPickerMonth(1)" aria-label="Mes siguiente">
+                                    <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div id="report-day-picker-grid" class="report-day-picker-grid"></div>
+                            <button type="button" class="btn btn-outline btn-sm report-day-today-btn" onclick="App.reports.pickToday()">
+                                Ir a hoy
+                            </button>
+                        </div>
                     </div>
                     <button class="btn btn-outline ripple-btn" onclick="App.reports.exportExcel()">
                         <i class="fas fa-file-excel"></i> Exportar Excel

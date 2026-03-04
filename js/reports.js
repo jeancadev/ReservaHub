@@ -4,6 +4,14 @@
 
 App.reports = {
     _periodPopulated: false,
+    _dayPickerInitialized: false,
+    _dayPickerOpen: false,
+    _dayPickerMonth: null,
+    _dayNames: ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'],
+    _monthNames: [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ],
 
     _dateKey(date) {
         const d = date instanceof Date ? date : new Date();
@@ -23,6 +31,153 @@ App.reports = {
 
         input.value = todayKey;
         return todayKey;
+    },
+
+    _parseDayKey(dayKey) {
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dayKey || '').trim());
+        if (!match) return null;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const parsed = new Date(year, month - 1, day, 12, 0, 0, 0);
+        if (
+            parsed.getFullYear() !== year ||
+            parsed.getMonth() !== month - 1 ||
+            parsed.getDate() !== day
+        ) return null;
+        return parsed;
+    },
+
+    _updateDayDisplay(dayKey) {
+        const display = document.getElementById('report-day-display');
+        if (!display) return;
+        display.textContent = App.formatDate(dayKey);
+    },
+
+    _setSelectedDayKey(dayKey, opts = {}) {
+        const parsed = this._parseDayKey(dayKey);
+        if (!parsed) return;
+        const normalized = this._dateKey(parsed);
+        const input = document.getElementById('report-day');
+        if (input) input.value = normalized;
+        this._updateDayDisplay(normalized);
+
+        if (!opts.keepMonth) {
+            this._dayPickerMonth = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+        }
+    },
+
+    _ensureDayPickerSetup() {
+        if (this._dayPickerInitialized) return;
+        this._dayPickerInitialized = true;
+
+        document.addEventListener('click', (event) => {
+            if (!this._dayPickerOpen) return;
+            const field = document.getElementById('report-day-field');
+            if (!field || field.contains(event.target)) return;
+            this.closeDayPicker();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || !this._dayPickerOpen) return;
+            this.closeDayPicker();
+        });
+    },
+
+    _renderDayPickerGrid() {
+        const grid = document.getElementById('report-day-picker-grid');
+        const title = document.getElementById('report-day-picker-title');
+        if (!grid || !title) return;
+
+        const selectedKey = this._getSelectedDayKey();
+        const selectedDate = this._parseDayKey(selectedKey) || App.getCRDate();
+        if (!(this._dayPickerMonth instanceof Date) || Number.isNaN(this._dayPickerMonth.getTime())) {
+            this._dayPickerMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        }
+
+        const year = this._dayPickerMonth.getFullYear();
+        const monthIndex = this._dayPickerMonth.getMonth();
+        const firstDay = new Date(year, monthIndex, 1).getDay();
+        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+        const todayKey = this._dateKey(App.getCRDate());
+        title.textContent = `${this._monthNames[monthIndex]} ${year}`;
+
+        let html = this._dayNames
+            .map(name => `<span class="report-day-name">${name}</span>`)
+            .join('');
+
+        for (let i = 0; i < firstDay; i++) {
+            html += '<span class="report-day-cell empty" aria-hidden="true"></span>';
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const classes = ['report-day-cell'];
+            if (key === selectedKey) classes.push('selected');
+            if (key === todayKey) classes.push('today');
+            html += `<button type="button" class="${classes.join(' ')}" onclick="App.reports.selectDay('${key}')">${day}</button>`;
+        }
+
+        const remainder = (firstDay + daysInMonth) % 7;
+        if (remainder !== 0) {
+            for (let i = remainder; i < 7; i++) {
+                html += '<span class="report-day-cell empty" aria-hidden="true"></span>';
+            }
+        }
+
+        grid.innerHTML = html;
+    },
+
+    toggleDayPicker() {
+        if (this._dayPickerOpen) {
+            this.closeDayPicker();
+            return;
+        }
+        this.openDayPicker();
+    },
+
+    openDayPicker() {
+        const picker = document.getElementById('report-day-picker');
+        const trigger = document.getElementById('report-day-trigger');
+        if (!picker || !trigger) return;
+
+        this._ensureDayPickerSetup();
+        const selected = this._parseDayKey(this._getSelectedDayKey()) || App.getCRDate();
+        if (!(this._dayPickerMonth instanceof Date) || Number.isNaN(this._dayPickerMonth.getTime())) {
+            this._dayPickerMonth = new Date(selected.getFullYear(), selected.getMonth(), 1);
+        }
+        this._renderDayPickerGrid();
+
+        picker.hidden = false;
+        this._dayPickerOpen = true;
+        trigger.setAttribute('aria-expanded', 'true');
+    },
+
+    closeDayPicker() {
+        const picker = document.getElementById('report-day-picker');
+        const trigger = document.getElementById('report-day-trigger');
+        if (picker) picker.hidden = true;
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        this._dayPickerOpen = false;
+    },
+
+    shiftDayPickerMonth(offset) {
+        const selected = this._parseDayKey(this._getSelectedDayKey()) || App.getCRDate();
+        if (!(this._dayPickerMonth instanceof Date) || Number.isNaN(this._dayPickerMonth.getTime())) {
+            this._dayPickerMonth = new Date(selected.getFullYear(), selected.getMonth(), 1);
+        }
+        this._dayPickerMonth.setMonth(this._dayPickerMonth.getMonth() + (Number(offset) || 0));
+        this._renderDayPickerGrid();
+    },
+
+    selectDay(dayKey) {
+        this._setSelectedDayKey(dayKey);
+        this.closeDayPicker();
+        this.render();
+    },
+
+    pickToday() {
+        this.selectDay(this._dateKey(App.getCRDate()));
     },
 
     _updateDailyRevenueLabel(dayKey) {
@@ -113,10 +268,13 @@ App.reports = {
 
     render() {
         this.populatePeriodSelect();
+        this._ensureDayPickerSetup();
 
         const { filtered, period } = this.getFilteredAppointments();
         const now = new Date();
         const selectedDayKey = this._getSelectedDayKey();
+        this._setSelectedDayKey(selectedDayKey, { keepMonth: true });
+        if (this._dayPickerOpen) this._renderDayPickerGrid();
 
         const total = filtered.filter(a => a.status !== 'cancelled').length;
         const completed = filtered.filter(a => a.status === 'completed');

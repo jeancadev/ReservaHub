@@ -5,6 +5,14 @@
 App.appointments = {
     PREPAYMENT_RATE: 0.4,
     PREPAYMENT_SINPE_PHONE: '6454-2137',
+    _datePickerInitialized: false,
+    _datePickerOpen: false,
+    _datePickerMonth: null,
+    _datePickerDayNames: ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'],
+    _datePickerMonthNames: [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ],
 
     showCreate(prefill = {}) {
         this._openForm('Nueva Cita', {
@@ -100,7 +108,35 @@ App.appointments = {
                 <div class="input-group form-grid-two">
                     <div>
                         <label>Fecha</label>
-                        <input type="date" id="appt-date" class="form-input" required value="${data.date || ''}" onchange="App.appointments.updateTimeSlots()">
+                        <div class="appt-date-field" id="appt-date-field">
+                            <input type="hidden" id="appt-date" value="${data.date || ''}">
+                            <button
+                                type="button"
+                                id="appt-date-trigger"
+                                class="form-input appt-date-trigger"
+                                aria-label="Seleccionar fecha de la cita"
+                                aria-haspopup="dialog"
+                                aria-expanded="false"
+                                onclick="App.appointments.toggleDatePicker()">
+                                <span id="appt-date-display">Seleccionar fecha</span>
+                                <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                            </button>
+                            <div id="appt-date-picker" class="appt-date-picker" role="dialog" aria-label="Calendario de cita" hidden>
+                                <div class="appt-date-picker-head">
+                                    <button type="button" class="btn-icon" onclick="App.appointments.shiftDatePickerMonth(-1)" aria-label="Mes anterior">
+                                        <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                                    </button>
+                                    <strong id="appt-date-picker-title"></strong>
+                                    <button type="button" class="btn-icon" onclick="App.appointments.shiftDatePickerMonth(1)" aria-label="Mes siguiente">
+                                        <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <div id="appt-date-picker-grid" class="appt-date-picker-grid"></div>
+                                <button type="button" class="btn btn-outline btn-sm appt-date-today-btn" onclick="App.appointments.pickDateToday()">
+                                    Ir a hoy
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <label>Hora</label>
@@ -146,8 +182,159 @@ App.appointments = {
 
         App.modal.open(title, body);
         App.ui.initRipple();
+        this._ensureDatePickerSetup();
+        this._syncDatePickerDisplay();
+        this.closeDatePicker();
         this.syncPriceAndSlots();
         this.updateTimeSlots(editId || null);
+    },
+
+    _parsePickerDate(dayKey) {
+        const normalized = String(dayKey || '').trim().slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+        const parsed = this._parseDateTimeLocal(normalized, '12:00');
+        if (!(parsed instanceof Date) || Number.isNaN(parsed.getTime())) return null;
+        return this._toLocalDateIso(parsed) === normalized ? parsed : null;
+    },
+
+    _getDatePickerValue() {
+        const input = document.getElementById('appt-date');
+        const todayKey = this._toLocalDateIso(App.getCRDate());
+        if (!input) return todayKey;
+        const parsed = this._parsePickerDate(input.value);
+        if (parsed) return this._toLocalDateIso(parsed);
+        input.value = todayKey;
+        return todayKey;
+    },
+
+    _setDatePickerValue(dayKey, opts = {}) {
+        const parsed = this._parsePickerDate(dayKey);
+        if (!parsed) return;
+        const normalized = this._toLocalDateIso(parsed);
+        const input = document.getElementById('appt-date');
+        const display = document.getElementById('appt-date-display');
+        if (input) input.value = normalized;
+        if (display) display.textContent = App.formatDate(normalized);
+        if (!opts.keepMonth) {
+            this._datePickerMonth = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+        }
+    },
+
+    _syncDatePickerDisplay() {
+        this._setDatePickerValue(this._getDatePickerValue(), { keepMonth: true });
+    },
+
+    _ensureDatePickerSetup() {
+        if (this._datePickerInitialized) return;
+        this._datePickerInitialized = true;
+
+        document.addEventListener('click', (event) => {
+            if (!this._datePickerOpen) return;
+            const field = document.getElementById('appt-date-field');
+            if (!field || field.contains(event.target)) return;
+            this.closeDatePicker();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || !this._datePickerOpen) return;
+            this.closeDatePicker();
+        });
+    },
+
+    _renderDatePickerGrid() {
+        const grid = document.getElementById('appt-date-picker-grid');
+        const title = document.getElementById('appt-date-picker-title');
+        if (!grid || !title) return;
+
+        const selectedKey = this._getDatePickerValue();
+        const selectedDate = this._parsePickerDate(selectedKey) || App.getCRDate();
+        if (!(this._datePickerMonth instanceof Date) || Number.isNaN(this._datePickerMonth.getTime())) {
+            this._datePickerMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        }
+
+        const year = this._datePickerMonth.getFullYear();
+        const monthIndex = this._datePickerMonth.getMonth();
+        const firstDay = new Date(year, monthIndex, 1).getDay();
+        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+        const todayKey = this._toLocalDateIso(App.getCRDate());
+        title.textContent = `${this._datePickerMonthNames[monthIndex]} ${year}`;
+
+        let html = this._datePickerDayNames
+            .map(name => `<span class="appt-date-name">${name}</span>`)
+            .join('');
+
+        for (let i = 0; i < firstDay; i++) {
+            html += '<span class="appt-date-cell empty" aria-hidden="true"></span>';
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const classes = ['appt-date-cell'];
+            if (key === selectedKey) classes.push('selected');
+            if (key === todayKey) classes.push('today');
+            html += `<button type="button" class="${classes.join(' ')}" onclick="App.appointments.selectDateFromPicker('${key}')">${day}</button>`;
+        }
+
+        const remainder = (firstDay + daysInMonth) % 7;
+        if (remainder !== 0) {
+            for (let i = remainder; i < 7; i++) {
+                html += '<span class="appt-date-cell empty" aria-hidden="true"></span>';
+            }
+        }
+
+        grid.innerHTML = html;
+    },
+
+    toggleDatePicker() {
+        if (this._datePickerOpen) {
+            this.closeDatePicker();
+            return;
+        }
+        this.openDatePicker();
+    },
+
+    openDatePicker() {
+        const picker = document.getElementById('appt-date-picker');
+        const trigger = document.getElementById('appt-date-trigger');
+        if (!picker || !trigger) return;
+
+        this._syncDatePickerDisplay();
+        const selected = this._parsePickerDate(this._getDatePickerValue()) || App.getCRDate();
+        if (!(this._datePickerMonth instanceof Date) || Number.isNaN(this._datePickerMonth.getTime())) {
+            this._datePickerMonth = new Date(selected.getFullYear(), selected.getMonth(), 1);
+        }
+        this._renderDatePickerGrid();
+
+        picker.hidden = false;
+        this._datePickerOpen = true;
+        trigger.setAttribute('aria-expanded', 'true');
+    },
+
+    closeDatePicker() {
+        const picker = document.getElementById('appt-date-picker');
+        const trigger = document.getElementById('appt-date-trigger');
+        if (picker) picker.hidden = true;
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        this._datePickerOpen = false;
+    },
+
+    shiftDatePickerMonth(offset) {
+        const selected = this._parsePickerDate(this._getDatePickerValue()) || App.getCRDate();
+        if (!(this._datePickerMonth instanceof Date) || Number.isNaN(this._datePickerMonth.getTime())) {
+            this._datePickerMonth = new Date(selected.getFullYear(), selected.getMonth(), 1);
+        }
+        this._datePickerMonth.setMonth(this._datePickerMonth.getMonth() + (Number(offset) || 0));
+        this._renderDatePickerGrid();
+    },
+
+    selectDateFromPicker(dayKey) {
+        this._setDatePickerValue(dayKey);
+        this.closeDatePicker();
+        this.updateTimeSlots(this._activeEditId || null);
+    },
+
+    pickDateToday() {
+        this.selectDateFromPicker(this._toLocalDateIso(App.getCRDate()));
     },
 
     fillClientFromSelect() {
